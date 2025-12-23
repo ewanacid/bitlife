@@ -17,15 +17,3 @@ jobs:
           # Default: buildozer.spec
           # spec_file: buildozer.spec
 
-          # The type of build to perform.
-          # Options: debug, release, clean
-          # Default: debug
-          build_mode: debug
-
-          # Whether to upload the generated APK as a workflow artifact.
-          # Default: true
-          # upload_artifact: true
-
-          # The name of the artifact to upload.
-          # Default: app-release
-          artifact_name: BitLife-APK
