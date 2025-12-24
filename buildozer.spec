@@ -1,22 +1,18 @@
 [app]
-title = BitLife Elite
-package.name = bitlifeelite
+title = NFG Elite
+package.name = nfgelite
 package.domain = org.nfg
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ttf
-version = 1.0
-
-# THE FIX: Add kivymd, pillow, and standard libs
-requirements = python3,kivy==2.2.0,kivymd,pillow,android,jnius
+version = 4.0
+requirements = python3,kivy==2.2.0,kivymd,pillow,android
 
 orientation = portrait
-fullscreen = 0
-android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
+fullscreen = 1
+android.permissions = INTERNET,ACCESS_WIFI_STATE,ACCESS_NETWORK_STATE
 android.api = 33
 android.minapi = 21
 android.archs = arm64-v8a
-
-# Splash screen (optional, keeps it stable)
 android.presplash_color = #000000
 
 [buildozer]

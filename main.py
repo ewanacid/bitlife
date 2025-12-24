@@ -1,215 +1,116 @@
 from kivymd.app import MDApp
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.screenmanager import MDScreenManager
-from kivymd.uix.button import MDFillRoundFlatButton, MDRectangleFlatButton
-from kivymd.uix.label import MDLabel
 from kivymd.uix.boxlayout import MDBoxLayout
-from kivymd.uix.scrollview import MDScrollView
-from kivymd.uix.list import MDList, OneLineListItem, TwoLineListItem
+from kivymd.uix.gridlayout import MDGridLayout
+from kivymd.uix.button import MDFillRoundFlatButton, MDIconButton
+from kivymd.uix.label import MDLabel
 from kivymd.uix.card import MDCard
-from kivymd.uix.dialog import MDDialog
+from kivymd.uix.progressbar import MDProgressBar
+from kivy.clock import Clock
+from kivy.graphics import Color, Line, Ellipse
+from kivy.metrics import dp
 import random
+import time
 
-# --- GAME ENGINE ---
-class LifeEngine:
-    def __init__(self):
-        self.age = 0
-        self.money = 0
-        self.happiness = 100
-        self.health = 100
-        self.job = "Unemployed"
-        self.salary = 0
-        self.assets = []
-        self.alive = True
-
-    def age_up(self):
-        self.age += 1
-        self.money += self.salary
-        
-        # Age-based events
-        event = ""
-        if self.age < 5:
-            event = random.choice(["Learned to walk.", "Said first word.", "Cried all night.", "Ate dirt."])
-        elif self.age < 18:
-            event = random.choice(["Got an A in math.", "Bullied at school.", "First kiss!", "Skipped class."])
-        elif self.age > 60:
-            self.health -= random.randint(5, 15)
-            event = random.choice(["Back pain started.", "Retired from bingo.", "Forgot where keys are.", "Grandkids visited."])
-        else:
-            # Adult events
-            if self.job == "Unemployed":
-                event = random.choice(["Looked for work.", "Watched TV all day.", "Went to the park."])
-            else:
-                event = random.choice([f"Worked hard as a {self.job}.", "Boss yelled at you.", "Got a small raise!", "Boring day at work."])
-
-        # Random Chaos
-        if random.random() < 0.1:
-            chaos = random.choice([("Won the lottery!", 5000), ("Got robbed!", -500), ("Found $20", 20)])
-            event += f" AND {chaos[0]}"
-            self.money += chaos[1]
-
-        return event
-
-# --- UI SCREENS ---
-class MenuScreen(MDScreen):
-    def build_ui(self):
-        layout = MDBoxLayout(orientation='vertical', padding=40, spacing=20, pos_hint={'center_x': 0.5, 'center_y': 0.5})
-        
-        title = MDLabel(text="BITLIFE ELITE", halign="center", font_style="H3", theme_text_color="Primary")
-        layout.add_widget(title)
-        
-        btn = MDFillRoundFlatButton(
-            text="START NEW LIFE",
-            font_size=24,
-            pos_hint={'center_x': 0.5},
-            on_release=self.start_game
-        )
-        layout.add_widget(btn)
-        self.add_widget(layout)
-
-    def start_game(self, instance):
-        self.manager.current = 'game'
-
-class GameScreen(MDScreen):
+# --- MODULE: RADAR WIDGET ---
+class RadarWidget(MDCard):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.engine = LifeEngine()
-        self.dialog = None
+        self.size_hint = (None, None)
+        self.size = (dp(250), dp(250))
+        self.pos_hint = {'center_x': 0.5}
+        self.radius = [125]
+        self.md_bg_color = (0, 0.1, 0.1, 1)
+        self.angle = 0
+        self.blips = []
+        Clock.schedule_interval(self.update, 0.05)
 
-    def on_enter(self):
-        self.clear_widgets()
-        self.build_ui()
+    def update(self, dt):
+        self.angle = (self.angle + 5) % 360
+        self.canvas.after.clear()
+        
+        with self.canvas.after:
+            # Radar Sweep Line
+            Color(0, 1, 1, 0.8)
+            Line(circle=(self.center_x, self.center_y, dp(120), self.angle, self.angle+2), width=2)
+            
+            # Random Blips (Enemies)
+            if random.random() < 0.05:
+                self.blips.append({'x': random.randint(-100, 100), 'y': random.randint(-100, 100), 'life': 50})
+            
+            # Draw Blips
+            for blip in self.blips[:]:
+                blip['life'] -= 1
+                if blip['life'] <= 0: self.blips.remove(blip); continue
+                
+                opacity = blip['life'] / 50.0
+                Color(1, 0, 0, opacity)
+                Ellipse(pos=(self.center_x + dp(blip['x']), self.center_y + dp(blip['y'])), size=(dp(5), dp(5)))
 
+# --- SCREEN: DASHBOARD ---
+class Dashboard(MDScreen):
     def build_ui(self):
-        main_layout = MDBoxLayout(orientation='vertical', padding=10, spacing=10)
-
-        # 1. DASHBOARD CARD (Stats)
-        card = MDCard(orientation='vertical', size_hint=(1, 0.25), padding=10, radius=[15])
-        self.age_lbl = MDLabel(text="AGE: 0", halign="center", font_style="H5")
-        self.money_lbl = MDLabel(text="BANK: $0", halign="center", theme_text_color="Custom", text_color=(0,1,0,1))
-        self.job_lbl = MDLabel(text="JOB: Unemployed", halign="center", font_style="Caption")
+        layout = MDBoxLayout(orientation='vertical', padding=20, spacing=20)
         
-        stats_box = MDBoxLayout(orientation='horizontal')
-        self.hap_lbl = MDLabel(text="Hap: 100%", halign="center")
-        self.hlt_lbl = MDLabel(text="Hlt: 100%", halign="center")
-        stats_box.add_widget(self.hap_lbl)
-        stats_box.add_widget(self.hlt_lbl)
+        # HEADER
+        header = MDLabel(text="NFG SYSTEM v4.0", halign="center", font_style="H4", theme_text_color="Custom", text_color=(0,1,1,1), size_hint_y=0.1)
+        layout.add_widget(header)
 
-        card.add_widget(self.age_lbl)
-        card.add_widget(self.money_lbl)
-        card.add_widget(self.job_lbl)
-        card.add_widget(stats_box)
-        main_layout.add_widget(card)
-
-        # 2. EVENT LOG
-        scroll = MDScrollView(size_hint=(1, 0.5))
-        self.log_list = MDList()
-        scroll.add_widget(self.log_list)
-        main_layout.add_widget(scroll)
-
-        # 3. ACTION BUTTONS
-        actions = MDBoxLayout(orientation='horizontal', spacing=10, size_hint=(1, 0.1))
+        # 1. OVERWATCH MODULE (CPU/Stats)
+        stats_card = MDCard(orientation='vertical', size_hint_y=0.3, padding=15, radius=[15], md_bg_color=(0.1, 0.1, 0.1, 1))
+        stats_card.add_widget(MDLabel(text="REACTOR STATUS", halign="center", theme_text_color="Secondary"))
         
-        job_btn = MDRectangleFlatButton(text="JOBS", size_hint=(0.3, 1), on_release=self.show_jobs)
-        buy_btn = MDRectangleFlatButton(text="SHOP", size_hint=(0.3, 1), on_release=self.show_shop)
-        actions.add_widget(job_btn)
-        actions.add_widget(buy_btn)
-        main_layout.add_widget(actions)
-
-        # 4. AGE UP BUTTON (BIG)
-        age_btn = MDFillRoundFlatButton(text="AGE UP (+1 Year)", size_hint=(1, 0.15), font_size=20, on_release=self.age_up)
-        main_layout.add_widget(age_btn)
-
-        self.add_widget(main_layout)
-        self.log("You were born.")
-
-    def update_display(self):
-        self.age_lbl.text = f"AGE: {self.engine.age}"
-        self.money_lbl.text = f"BANK: ${self.engine.money}"
-        self.job_lbl.text = f"JOB: {self.engine.job} (${self.engine.salary}/yr)"
-        self.hap_lbl.text = f"Hap: {self.engine.happiness}%"
-        self.hlt_lbl.text = f"Hlt: {self.engine.health}%"
-
-    def log(self, text):
-        item = TwoLineListItem(text=f"Age {self.engine.age}", secondary_text=text)
-        self.log_list.add_widget(item, index=0) # Add to top
-
-    def age_up(self, instance):
-        if not self.engine.alive: return
-        event = self.engine.age_up()
-        self.log(event)
-        self.update_display()
+        self.cpu_label = MDLabel(text="CPU LOAD: 0%", halign="center", font_style="H6")
+        self.cpu_bar = MDProgressBar(value=0, color=(0,1,1,1))
         
-        if self.engine.health <= 0:
-            self.engine.alive = False
-            self.log("YOU HAVE DIED.")
-            instance.text = "GAME OVER"
-            instance.disabled = True
-
-    # --- POPUPS ---
-    def show_jobs(self, instance):
-        if self.engine.age < 18:
-            self.log("Too young to work!"); return
+        self.net_label = MDLabel(text="NET UPLINK: ONLINE", halign="center", font_style="Caption")
         
-        self.close_dialog()
-        # Simple job list
-        jobs = [("Janitor", 15000), ("Developer", 60000), ("Doctor", 120000)]
-        content = MDBoxLayout(orientation='vertical', size_hint_y=None, height=200)
+        stats_card.add_widget(self.cpu_label)
+        stats_card.add_widget(self.cpu_bar)
+        stats_card.add_widget(self.net_label)
+        layout.add_widget(stats_card)
+
+        # 2. RADAR MODULE
+        self.radar = RadarWidget()
+        layout.add_widget(self.radar)
+
+        # 3. CONTROL GRID
+        grid = MDGridLayout(cols=2, spacing=10, size_hint_y=0.2)
+        btn1 = MDFillRoundFlatButton(text="EWTUBE", size_hint=(1, 1), md_bg_color=(1, 0, 0, 1))
+        btn2 = MDFillRoundFlatButton(text="SCAN", size_hint=(1, 1), on_release=self.scan_network)
+        grid.add_widget(btn1)
+        grid.add_widget(btn2)
+        layout.add_widget(grid)
+
+        self.add_widget(layout)
+        Clock.schedule_interval(self.update_stats, 1)
+
+    def update_stats(self, dt):
+        # Fake CPU simulation for visual effect (Actual /proc/stat access is restricted on some Androids)
+        load = random.randint(10, 80)
+        self.cpu_label.text = f"CPU LOAD: {load}%"
+        self.cpu_bar.value = load
         
-        for name, salary in jobs:
-            b = MDRectangleFlatButton(text=f"{name} (${salary})", on_release=lambda x, n=name, s=salary: self.apply_job(n, s))
-            content.add_widget(b)
+        # Blink effect
+        color = (0,1,1,1) if load < 70 else (1,0,0,1)
+        self.cpu_label.text_color = color
+        self.cpu_bar.color = color
 
-        self.dialog = MDDialog(title="Job Listings", type="custom", content_cls=content)
-        self.dialog.open()
+    def scan_network(self, instance):
+        self.net_label.text = "SCANNING FREQUENCIES..."
+        Clock.schedule_once(lambda x: setattr(self.net_label, 'text', "NO THREATS DETECTED"), 2)
 
-    def apply_job(self, name, salary):
-        self.engine.job = name
-        self.engine.salary = salary
-        self.log(f"Hired as {name}!")
-        self.update_display()
-        self.close_dialog()
-
-    def show_shop(self, instance):
-        self.close_dialog()
-        items = [("Used Car", 5000), ("House", 100000), ("Fancy Suit", 1000)]
-        content = MDBoxLayout(orientation='vertical', size_hint_y=None, height=200)
-        
-        for name, price in items:
-            b = MDRectangleFlatButton(text=f"{name} (${price})", on_release=lambda x, n=name, p=price: self.buy_item(n, p))
-            content.add_widget(b)
-
-        self.dialog = MDDialog(title="Marketplace", type="custom", content_cls=content)
-        self.dialog.open()
-
-    def buy_item(self, name, price):
-        if self.engine.money >= price:
-            self.engine.money -= price
-            self.engine.assets.append(name)
-            self.log(f"Bought a {name}!")
-        else:
-            self.log(f"Can't afford {name}.")
-        self.update_display()
-        self.close_dialog()
-
-    def close_dialog(self, *args):
-        if self.dialog: self.dialog.dismiss()
-
-class BitLifeApp(MDApp):
+class NFGApp(MDApp):
     def build(self):
         self.theme_cls.theme_style = "Dark"
-        self.theme_cls.primary_palette = "Teal"
+        self.theme_cls.primary_palette = "Cyan"
         
         sm = MDScreenManager()
-        
-        menu = MenuScreen(name='menu')
-        menu.build_ui()
-        sm.add_widget(menu)
-        
-        game = GameScreen(name='game')
-        sm.add_widget(game)
-        
+        dash = Dashboard(name='dashboard')
+        dash.build_ui()
+        sm.add_widget(dash)
         return sm
 
 if __name__ == "__main__":
-    BitLifeApp().run()
+    NFGApp().run()
