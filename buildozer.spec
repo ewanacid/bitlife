@@ -1,15 +1,15 @@
 [app]
-title = NFG Elite
-package.name = nfgelite
+title = BitLife Elite
+package.name = bitlifeelite
 package.domain = org.nfg
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ttf
-version = 4.0
+version = 2.0
 requirements = python3,kivy==2.2.0,kivymd,pillow,android
 
 orientation = portrait
-fullscreen = 1
-android.permissions = INTERNET,ACCESS_WIFI_STATE,ACCESS_NETWORK_STATE
+fullscreen = 0
+android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
 android.api = 33
 android.minapi = 21
 android.archs = arm64-v8a
