@@ -1,10 +1,11 @@
 [app]
-title = BitLife Bedrock
-package.name = bitlifebedrock
+title = BitLife Titan
+package.name = bitlifetitan
 package.domain = org.nfg
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ttf
-version = 4.0
+version = 5.0
+# We force specific versions to ensure stability
 requirements = python3,kivy==2.2.0,kivymd,pillow,android
 orientation = portrait
 fullscreen = 0
