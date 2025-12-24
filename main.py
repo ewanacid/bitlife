@@ -1,30 +1,32 @@
-import os, random, json, traceback
-os.environ["KIVY_NO_ARGS"] = "1" # Force stability
+import os, sys, random, traceback
+os.environ["KIVY_NO_ARGS"] = "1"
 
+from kivy.app import App
+from kivy.core.window import Window
 from kivy.uix.screenmanager import ScreenManager, Screen, NoTransition
 from kivymd.app import MDApp
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.label import MDLabel
-from kivymd.uix.button import MDFillRoundFlatButton, MDRectangleFlatButton
+from kivymd.uix.button import MDFillRoundFlatButton, MDRectangleFlatButton, MDIconButton
 from kivymd.uix.list import MDList, TwoLineListItem
 from kivymd.uix.scrollview import MDScrollView
+from kivymd.uix.progressbar import MDProgressBar
 
-# --- CORE ENGINE ---
+# --- CORE LOGIC ---
 class LifeEngine:
     def __init__(self):
-        self.reset()
-    
-    def reset(self):
+        self.name = "Bit Player"
         self.age = 0
         self.money = 0
+        self.career = "Unemployed"
+        # The Big 4 Stats
+        self.happiness = 90
         self.health = 100
-        self.happiness = 100
+        self.smarts = random.randint(30, 90)
+        self.looks = random.randint(30, 90)
         self.alive = True
-        self.job = "Unemployed"
-        self.salary = 0
-        self.assets = []
-        self.relationships = [] # {name, type, stats}
-        self.log_history = ["Born into the Titan System."]
+        self.log_history = ["You were born into a simulation."]
+        self.parents = [{"name": "Mom", "rel": 100}, {"name": "Dad", "rel": 100}]
 
     def log(self, text):
         self.log_history.insert(0, f"Age {self.age}: {text}")
@@ -32,206 +34,234 @@ class LifeEngine:
     def age_up(self):
         if not self.alive: return
         self.age += 1
-        self.money += self.salary
         
+        # Salary
+        if self.career != "Unemployed":
+            pay = 50000 if "Developer" in self.career else 20000
+            self.money += pay
+            
         # Random Life Events
         roll = random.random()
-        if roll < 0.1:
-            self.health -= 10; self.log("You felt sick (-10 Hlth)")
-        elif roll < 0.2:
-            self.happiness += 10; self.log("Had a great birthday party!")
-        elif roll < 0.25:
-            self.money += 500; self.log("Won a scratch-off ticket (+$500)")
+        if roll < 0.15:
+            self.happiness -= 10
+            self.log("You felt depressed.")
+        elif roll < 0.30:
+            self.health -= 5
+            self.log("Contracted a minor illness.")
+        elif roll < 0.40:
+             self.log("Parents argued all night.")
 
-        if self.age > 80 and random.random() < 0.2:
-            self.alive = False; self.log("Died of natural causes.")
+        if self.health <= 0:
+            self.alive = False
+            self.log("DIED.")
 
-    def save_game(self):
-        data = self.__dict__.copy()
-        try:
-            with open("titan_save.json", "w") as f: json.dump(data, f)
-        except: pass
+# --- UI COMPONENTS ---
+class StatBar(MDBoxLayout):
+    def __init__(self, label, value, color, **kwargs):
+        super().__init__(orientation='vertical', size_hint_x=0.25, **kwargs)
+        self.add_widget(MDLabel(text=f"{label}: {value}%", halign="center", font_style="Caption", theme_text_color="Custom", text_color=color))
+        self.bar = MDProgressBar(value=value, color=color, size_hint_y=None, height="4dp")
+        self.add_widget(self.bar)
 
-    def load_game(self):
-        if os.path.exists("titan_save.json"):
-            try:
-                with open("titan_save.json", "r") as f:
-                    data = json.load(f)
-                    self.__dict__.update(data)
-                return True
-            except: pass
-        return False
-
-# --- UI: DASHBOARD (Safe, No Crashes) ---
-class DashScreen(Screen):
+# --- MAIN SCREEN (THE BITLIFE LOOK) ---
+class MainGame(Screen):
     def on_enter(self):
-        app = MDApp.get_running_app()
-        self.engine = app.engine
+        self.app = MDApp.get_running_app()
+        self.engine = self.app.engine
         self.build_ui()
 
     def build_ui(self):
         self.clear_widgets()
-        layout = MDBoxLayout(orientation='vertical', padding=20, spacing=15)
+        # ROOT: Vertical Layout
+        root = MDBoxLayout(orientation='vertical', padding=10, spacing=10)
 
-        # HEADER (Simple Text, No Cards to Crash)
-        self.lbl_stats = MDLabel(
-            text="Initializing...", 
-            halign="center", 
-            theme_text_color="Custom", 
-            text_color=(0,1,0,1),
-            font_style="H5",
-            size_hint=(1, 0.2)
-        )
-        layout.add_widget(self.lbl_stats)
+        # 1. TOP HEADER (Name | Wealth | Career)
+        header = MDBoxLayout(orientation='vertical', size_hint=(1, 0.15))
+        self.lbl_name = MDLabel(text=f"{self.engine.name}", font_style="H5", halign="center")
+        self.lbl_sub = MDLabel(text=f"Wealth: ${self.engine.money:,} | {self.engine.career}", font_style="Subtitle1", halign="center", theme_text_color="Secondary")
+        header.add_widget(self.lbl_name)
+        header.add_widget(self.lbl_sub)
+        root.add_widget(header)
 
-        # LOG (Scrollable)
+        # 2. THE LOG (The Main BitLife Area)
+        # White text on dark bg, scrollable
         scroll = MDScrollView(size_hint=(1, 0.5))
         self.log_list = MDList()
         scroll.add_widget(self.log_list)
-        layout.add_widget(scroll)
+        root.add_widget(scroll)
 
-        # MENU BUTTONS (Grid)
-        row1 = MDBoxLayout(spacing=10, size_hint=(1, 0.1))
-        row1.add_widget(MDRectangleFlatButton(text="CAREER", size_hint=(0.5, 1), on_release=lambda x: self.goto("career")))
-        row1.add_widget(MDRectangleFlatButton(text="CRIME", size_hint=(0.5, 1), on_release=lambda x: self.goto("crime")))
-        layout.add_widget(row1)
+        # 3. AGE BUTTON (Massive Center Button)
+        mid_box = MDBoxLayout(padding=[40, 10], size_hint=(1, 0.15))
+        btn_age = MDFillRoundFlatButton(
+            text=f"AGE UP\n(+1 Year)", 
+            font_size=24,
+            size_hint=(1, 1),
+            md_bg_color=(0, 0.7, 0, 1), # BitLife Green
+            on_release=self.do_age
+        )
+        mid_box.add_widget(btn_age)
+        root.add_widget(mid_box)
 
-        row2 = MDBoxLayout(spacing=10, size_hint=(1, 0.1))
-        row2.add_widget(MDRectangleFlatButton(text="ASSETS", size_hint=(0.5, 1), on_release=lambda x: self.goto("assets")))
-        row2.add_widget(MDRectangleFlatButton(text="LOVE", size_hint=(0.5, 1), on_release=lambda x: self.goto("love")))
-        layout.add_widget(row2)
+        # 4. THE 4 BARS (Hap, Hlth, Smrt, Look)
+        stats_box = MDBoxLayout(orientation='horizontal', size_hint=(1, 0.1), spacing=5)
+        self.bar_hap = StatBar("Hap", self.engine.happiness, (0,1,0,1))   # Green
+        self.bar_hlt = StatBar("Hlth", self.engine.health, (1,0,0,1))     # Red
+        self.bar_smr = StatBar("Smrt", self.engine.smarts, (0,0,1,1))     # Blue
+        self.bar_lok = StatBar("Look", self.engine.looks, (1,0.6,0,1))    # Orange
+        stats_box.add_widget(self.bar_hap)
+        stats_box.add_widget(self.bar_hlt)
+        stats_box.add_widget(self.bar_smr)
+        stats_box.add_widget(self.bar_lok)
+        root.add_widget(stats_box)
 
-        # AGE UP
-        layout.add_widget(MDFillRoundFlatButton(text="AGE UP (+1 Year)", size_hint=(1, 0.15), on_release=self.do_age))
+        # 5. BOTTOM NAV (Assets | Relat | Activities)
+        nav_box = MDBoxLayout(orientation='horizontal', size_hint=(1, 0.1), spacing=2)
+        nav_box.add_widget(MDRectangleFlatButton(text="ASSETS", size_hint=(0.33, 1), on_release=lambda x: self.open_menu("assets")))
+        nav_box.add_widget(MDRectangleFlatButton(text="RELATION", size_hint=(0.33, 1), on_release=lambda x: self.open_menu("relation")))
+        nav_box.add_widget(MDRectangleFlatButton(text="ACTIVITY", size_hint=(0.33, 1), on_release=lambda x: self.open_menu("activity")))
+        root.add_widget(nav_box)
 
-        self.add_widget(layout)
+        self.add_widget(root)
         self.update_display()
 
     def update_display(self):
         e = self.engine
-        self.lbl_stats.text = f"AGE: {e.age} | ${e.money:,}\nJob: {e.job} | Hap: {e.happiness}%"
+        self.lbl_name.text = f"{e.name} ({e.age})"
+        self.lbl_sub.text = f"Bank: ${e.money:,} | Job: {e.career}"
+        
+        # Update Bars
+        self.bar_hap.children[1].value = e.happiness
+        self.bar_hlt.children[1].value = e.health
+        self.bar_smr.children[1].value = e.smarts
+        self.bar_lok.children[1].value = e.looks
+
+        # Update Log
         self.log_list.clear_widgets()
-        for txt in e.log_history[:20]:
+        for txt in e.log_history[:30]:
             self.log_list.add_widget(TwoLineListItem(text=txt, secondary_text=""))
 
     def do_age(self, *args):
         self.engine.age_up()
-        self.engine.save_game()
         self.update_display()
 
-    def goto(self, name):
-        self.manager.current = name
+    def open_menu(self, menu_type):
+        self.manager.current = menu_type
 
-# --- UI: MENUS (Generic for Career, Crime, etc) ---
+# --- MENU SCREEN (Activities, Relations, Assets) ---
 class MenuScreen(Screen):
-    def __init__(self, menu_type, **kwargs):
-        super().__init__(**kwargs)
-        self.menu_type = menu_type
-    
-    def on_enter(self):
-        self.engine = MDApp.get_running_app().engine
-        self.build_ui()
+    def __init__(self, name, title, items, **kwargs):
+        super().__init__(name=name, **kwargs)
+        self.title = title
+        self.items = items # List of (Label, Callback)
 
-    def build_ui(self):
+    def on_enter(self):
         self.clear_widgets()
-        layout = MDBoxLayout(orientation='vertical', padding=20, spacing=20)
+        layout = MDBoxLayout(orientation='vertical', padding=20)
         
-        layout.add_widget(MDLabel(text=self.menu_type.upper(), halign="center", font_style="H4", size_hint=(1, 0.2)))
+        # Header
+        layout.add_widget(MDLabel(text=self.title, font_style="H4", halign="center", size_hint=(1, 0.15)))
         
+        # Scrollable List
         scroll = MDScrollView()
         lst = MDList()
         
-        # DYNAMIC CONTENT
-        items = []
-        if self.menu_type == "career":
-            items = [("Janitor ($15k)", 15000), ("Chef ($40k)", 40000), ("Developer ($80k)", 80000), ("CEO ($200k)", 200000)]
-            for title, sal in items:
-                lst.add_widget(MDRectangleFlatButton(text=title, size_hint=(1, None), height=50, 
-                    on_release=lambda x, t=title, s=sal: self.do_job(t, s)))
-                    
-        elif self.menu_type == "crime":
-            items = [("Shoplift ($50)", 50, 0.1), ("Rob House ($5k)", 5000, 0.3), ("Bank Heist ($1M)", 1000000, 0.8)]
-            for name, val, risk in items:
-                lst.add_widget(MDRectangleFlatButton(text=name, size_hint=(1, None), height=50, 
-                    on_release=lambda x, n=name, v=val, r=risk: self.do_crime(n, v, r)))
-
-        elif self.menu_type == "assets":
-            items = [("Used Car ($5k)", 5000), ("Luxury Car ($80k)", 80000), ("House ($200k)", 200000)]
-            for name, cost in items:
-                lst.add_widget(MDRectangleFlatButton(text=name, size_hint=(1, None), height=50, 
-                    on_release=lambda x, n=name, c=cost: self.do_buy(n, c)))
-
-        elif self.menu_type == "love":
-             lst.add_widget(MDRectangleFlatButton(text="Find Partner", size_hint=(1, None), on_release=self.find_love))
-             lst.add_widget(MDRectangleFlatButton(text="Have Child", size_hint=(1, None), on_release=self.have_kid))
-
+        for text, func in self.items:
+            lst.add_widget(MDRectangleFlatButton(
+                text=text, 
+                size_hint=(1, None), 
+                height="60dp",
+                on_release=func
+            ))
+            
         scroll.add_widget(lst)
         layout.add_widget(scroll)
         
-        layout.add_widget(MDFillRoundFlatButton(text="BACK", size_hint=(1, 0.1), on_release=lambda x: self.go_back()))
+        # Back Button
+        layout.add_widget(MDFillRoundFlatButton(text="CLOSE", size_hint=(1, 0.1), on_release=self.go_back))
         self.add_widget(layout)
 
-    def go_back(self):
-        self.manager.current = 'dash'
+    def go_back(self, *args):
+        self.manager.current = 'game'
 
-    def do_job(self, title, salary):
-        self.engine.job = title
-        self.engine.salary = salary
-        self.engine.log(f"Hired as {title}!")
-        self.go_back()
-
-    def do_crime(self, name, val, risk):
-        if random.random() > risk:
-            self.engine.money += val
-            self.engine.log(f"SUCCESS: {name} (+${val})")
-        else:
-            self.engine.happiness -= 20
-            self.engine.log(f"FAILED: Caught trying to {name}!")
-        self.go_back()
-
-    def do_buy(self, name, cost):
-        if self.engine.money >= cost:
-            self.engine.money -= cost
-            self.engine.assets.append(name)
-            self.engine.log(f"Bought {name}!")
-        else:
-            self.engine.log("Not enough money!")
-        self.go_back()
-
-    def find_love(self, *args):
-        names = ["Ashley", "Jessica", "Amanda", "Sarah", "Mike", "Chris", "Tom"]
-        partner = random.choice(names)
-        self.engine.relationships.append(partner)
-        self.engine.log(f"Started dating {partner}!")
-        self.go_back()
-
-    def have_kid(self, *args):
-        names = ["Liam", "Noah", "Emma", "Olivia"]
-        kid = random.choice(names)
-        self.engine.relationships.append(f"Child: {kid}")
-        self.engine.log(f"Had a baby named {kid}!")
-        self.go_back()
-
-class TitanApp(MDApp):
+class CloneApp(MDApp):
     def build(self):
         self.theme_cls.theme_style = "Dark"
-        self.theme_cls.primary_palette = "DeepPurple"
-        
+        self.theme_cls.primary_palette = "Green"
         self.engine = LifeEngine()
-        self.engine.load_game() # Persistence
         
-        # NO TRANSITIONS (Prevents graphics crash)
         sm = ScreenManager(transition=NoTransition())
-        sm.add_widget(DashScreen(name='dash'))
-        sm.add_widget(MenuScreen(name='career', menu_type='career'))
-        sm.add_widget(MenuScreen(name='crime', menu_type='crime'))
-        sm.add_widget(MenuScreen(name='assets', menu_type='assets'))
-        sm.add_widget(MenuScreen(name='love', menu_type='love'))
+        
+        # 1. Main Game
+        sm.add_widget(MainGame(name='game'))
+        
+        # 2. Activity Menu
+        act_items = [
+            ("Mind & Body (Gym, Meditate)", self.do_gym),
+            ("Love (Date, Hookup)", self.do_love),
+            ("Crime (Rob, Murder)", self.do_crime),
+            ("Doctor (Cure Disease)", self.do_doc),
+            ("Jobs (Apply, Quit)", self.do_job),
+            ("Emigrate (Move Country)", self.do_move)
+        ]
+        sm.add_widget(MenuScreen("activity", "Activities", act_items))
+
+        # 3. Relationship Menu
+        rel_items = [
+            ("Mother (Interact)", self.interact_mom),
+            ("Father (Interact)", self.interact_dad)
+        ]
+        sm.add_widget(MenuScreen("relation", "Relationships", rel_items))
+
+        # 4. Assets Menu
+        asset_items = [
+            ("Go Shopping (Cars, Jewelry)", self.do_shop),
+            ("Real Estate (Houses)", self.do_realestate)
+        ]
+        sm.add_widget(MenuScreen("assets", "Assets", asset_items))
+        
         return sm
+
+    # --- ACTIONS ---
+    def log(self, t): self.engine.log(t)
+    
+    def do_gym(self, *x):
+        self.engine.health = min(100, self.engine.health + 5)
+        self.engine.looks = min(100, self.engine.looks + 2)
+        self.log("You went to the gym.")
+        self.root.current = 'game'
+
+    def do_love(self, *x):
+        self.log("You went on a date. It went okay.")
+        self.root.current = 'game'
+
+    def do_crime(self, *x):
+        if random.random() > 0.5:
+            self.engine.money += 1000
+            self.log("You robbed a house! (+$1000)")
+        else:
+            self.engine.happiness -= 20
+            self.log("Police caught you! You hired a lawyer.")
+        self.root.current = 'game'
+        
+    def do_doc(self, *x):
+        self.engine.money -= 100
+        self.engine.health = 100
+        self.log("Dr. Mario cured you. (-$100)")
+        self.root.current = 'game'
+
+    def do_job(self, *x):
+        self.engine.career = "App Developer"
+        self.log("You were hired as an App Developer!")
+        self.root.current = 'game'
+
+    def do_move(self, *x): self.log("You moved to Canada."); self.root.current = 'game'
+    def interact_mom(self, *x): self.log("You gave your mom a hug."); self.root.current = 'game'
+    def interact_dad(self, *x): self.log("Your dad gave you $50."); self.engine.money += 50; self.root.current = 'game'
+    def do_shop(self, *x): self.log("You bought a fake Rolex."); self.engine.money -= 200; self.root.current = 'game'
+    def do_realestate(self, *x): self.log("You can't afford a house yet."); self.root.current = 'game'
 
 if __name__ == "__main__":
     try:
-        TitanApp().run()
+        CloneApp().run()
     except Exception as e:
-        # LOG CRASH TO FILE
-        with open("crash.log", "w") as f: f.write(traceback.format_exc())
+        with open("crash.txt", "w") as f: f.write(traceback.format_exc())
