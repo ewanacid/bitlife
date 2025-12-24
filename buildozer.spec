@@ -1,18 +1,23 @@
 [app]
-title = Hello World App
-package.name = helloworldapp
-package.domain = org.test
+title = BitLife Elite
+package.name = bitlifeelite
+package.domain = org.nfg
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas
-version = 0.1
-requirements = python3,kivy==2.2.0
+source.include_exts = py,png,jpg,kv,atlas,ttf
+version = 1.0
+
+# THE FIX: Add kivymd, pillow, and standard libs
+requirements = python3,kivy==2.2.0,kivymd,pillow,android,jnius
 
 orientation = portrait
 fullscreen = 0
-android.permissions = INTERNET
+android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
+android.api = 33
+android.minapi = 21
 android.archs = arm64-v8a
-android.allow_backup = True
-android.accept_sdk_license = True
+
+# Splash screen (optional, keeps it stable)
+android.presplash_color = #000000
 
 [buildozer]
 log_level = 2
