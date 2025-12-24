@@ -1,14 +1,16 @@
 [app]
-title = BitLife Cosmic
-package.name = bitlifecosmic
+title = BitLife 3000
+package.name = bitlife3000
 package.domain = org.nfg
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ttf
-version = 8.0
-requirements = python3,kivy==2.2.0,kivymd,pillow,android
+version = 30.0.0
+# CRITICAL: Added plyer for vibration, pillow for images
+requirements = python3,kivy==2.2.0,kivymd,pillow,android,plyer
 orientation = portrait
 fullscreen = 0
-android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE
+# CRITICAL: Permissions for vibration and storage
+android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,VIBRATE
 android.api = 33
 android.minapi = 21
 android.archs = arm64-v8a

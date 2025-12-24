@@ -9,16 +9,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # --- CRITICAL FIX: FREE DISK SPACE ---
-      - name: Free Disk Space
+      # --- YEAR 3000 DISK PURGE ---
+      # Deletes 10GB of pre-installed .NET/Haskell/Android tools to free space.
+      - name: Purge Factory Disk
         run: |
-          echo "Listing space before cleanup..."
-          df -h
           sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
           sudo rm -rf /opt/ghc
           sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-          echo "Space after cleanup:"
           df -h
 
       - name: Setup Java
@@ -27,12 +26,11 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # CHANGED CACHE KEY TO 'v2' TO FORCE FRESH START
-      - name: Cache Buildozer Global
+      - name: Cache Buildozer
         uses: actions/cache@v3
         with:
           path: ~/.buildozer
-          key: buildozer-global-v2-${{ hashFiles('buildozer.spec') }}
+          key: buildozer-global-v3000-${{ hashFiles('buildozer.spec') }}
 
       - name: Install Dependencies
         run: |
@@ -50,5 +48,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: BitLife-Cosmic-APK
+          name: BitLife-3000-APK
           path: bin/*.apk
