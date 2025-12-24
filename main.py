@@ -15,10 +15,9 @@ from kivymd.uix.button import MDFillRoundFlatButton, MDRectangleFlatButton
 from kivymd.uix.scrollview import MDScrollView
 from kivymd.uix.progressbar import MDProgressBar
 from kivymd.uix.dialog import MDDialog
-from kivymd.uix.textfield import MDTextField # Added for name input
+from kivymd.uix.textfield import MDTextField 
 from kivy.properties import StringProperty, NumericProperty, ObjectProperty, DictProperty, ListProperty, BooleanProperty
 from kivy.clock import Clock
-# HAPTIC FEEDBACK
 from plyer import vibrator
 
 # --- ASSET LIBRARY ---
@@ -32,7 +31,9 @@ SPRITES = {
     "Study": "📖", "Meditate": "🧘", "Volunteer": "🫶", "Travel": "✈️",
     "Degree": "🎓", "Promotion": "⬆️", "Demotion": "⬇️", "Layoff": "❌",
     "Marriage": "💍", "Child": "👶", "Pet": "🐾", "Skill": "💡",
-    "Bank": "🏦", "Stocks": "📈", "Crypto": "₿", "Business": "🏭"
+    "Bank": "🏦", "Stocks": "📈", "Crypto": "₿", "Business": "🏭",
+    "LifeOrb": "🌟", "Opportunity": "✨", "Wisdom": "🦉", "Charm": "✨",
+    "Strength": "💪", "Spirit": "👻"
 }
 
 JOBS = {
@@ -57,10 +58,10 @@ ASSETS = [
 ]
 
 EDUCATION_PROGRAMS = {
-    "High School": {"cost": 0, "smrt_gain": 5, "min_age": 14, "duration": 4},
+    "High School": {"cost": 0, "smrt_gain": 5, "min_age": 14, "duration": 4, "degree": "High School Diploma"},
     "University (Bachelors)": {"cost": 50000, "smrt_gain": 20, "min_age": 18, "duration": 4, "degree": "Bachelors"},
-    "Medical School (MD)": {"cost": 200000, "smrt_gain": 30, "min_age": 22, "duration": 4, "degree": "Doctorate", "req_smrt": 80},
-    "Law School (JD)": {"cost": 150000, "smrt_gain": 25, "min_age": 22, "duration": 3, "degree": "Doctorate", "req_smrt": 75}
+    "Medical School (MD)": {"cost": 200000, "smrt_gain": 30, "min_age": 22, "duration": 4, "degree": "Doctorate", "req_smrt": 80, "req_degree": "Bachelors"},
+    "Law School (JD)": {"cost": 150000, "smrt_gain": 25, "min_age": 22, "duration": 3, "degree": "Doctorate", "req_smrt": 75, "req_degree": "Bachelors"}
 }
 
 SKILLS_LEARN = {
@@ -72,15 +73,19 @@ SKILLS_LEARN = {
     "Music": {"cost": 300, "smrt_req": 10, "effect": {"hap": 3, "skill_level": 1}},
 }
 
+LIFE_ORBS = {
+    "Life Orb": {"icon": SPRITES['LifeOrb'], "effect": {"hlt": 20, "energy": 20}, "description": "Restores health and energy."},
+    "Wisdom Orb": {"icon": SPRITES['Wisdom'], "effect": {"smrt": 15}, "description": "Increases smarts."},
+    "Charm Orb": {"icon": SPRITES['Charm'], "effect": {"look": 15}, "description": "Increases looks."},
+    "Strength Orb": {"icon": SPRITES['Strength'], "effect": {"hlt": 10, "energy": 10}, "description": "Minor health/energy boost."},
+    "Spirit Orb": {"icon": SPRITES['Spirit'], "effect": {"hap": 15, "stress": -10}, "description": "Boosts happiness and reduces stress."}
+}
 
 # --- DEEP SIMULATION ENGINE ---
 class SimEngine:
     def __init__(self):
-        # Character creation attributes, set by CharacterCreationScreen
         self.char_name = ""
-        self.char_gender = "Male" # Default gender
-        
-        # Initial stats that can be randomized for character creation
+        self.char_gender = "Male"
         self.initial_smrt = 0
         self.initial_look = 0
         self.initial_hap = 0
@@ -89,13 +94,13 @@ class SimEngine:
         self.initial_stress = 0
         self.initial_energy = 0
         self.initial_fame = 0
-        self.generate_initial_stats() # Generate first set of stats on init
-
-        self.reset() # Call reset to set up game with default/generated initial values
+        self.generate_initial_stats()
+        self.reset()
         self.dialog_queue = []
+        self.life_orb_locations = []
+        self.MAX_LIFE_ORBS = 3
 
     def generate_initial_stats(self):
-        """Generates a random set of starting stats for a new character."""
         self.initial_smrt = random.randint(20, 90)
         self.initial_look = random.randint(20, 90)
         self.initial_hap = random.randint(70, 100)
@@ -106,13 +111,10 @@ class SimEngine:
         self.initial_fame = random.randint(-5, 5)
 
     def set_character_details(self, name, gender):
-        """Sets the character's chosen name and gender from the creation screen."""
         self.char_name = name
         self.char_gender = gender
-        # These will be picked up by the next call to reset()
 
     def reset(self):
-        # Use chosen name and gender, or generate if not set (should be set by char creation)
         self.name = self.char_name if self.char_name else f"{random.choice(['Liam','Noah','Oliver','James','Emma','Ava'])} {random.choice(['Smith','Jones','Brown','Garcia'])}"
         self.gender = self.char_gender if self.char_gender else random.choice(["Male", "Female"])
         self.face = SPRITES[self.gender]
@@ -120,10 +122,9 @@ class SimEngine:
         self.money = 0
         self.career = "Unemployed"
         self.education = "None"
-        self.current_education = None # Stores current ongoing education program
+        self.current_education = None
         self.education_years_left = 0
         
-        # CORE STATS - use the initial values generated for character creation
         self.hap = self.initial_hap
         self.hlt = self.initial_hlt
         self.smrt = self.initial_smrt
@@ -135,15 +136,17 @@ class SimEngine:
         
         self.alive = True
         self.jail = 0
-        self.assets = [] # List of {"name": "Car", "val": 5000, "type": "Car", "props": {...}}
+        self.assets = []
         self.relations = [{"name": "Mom", "rel": 100, "type": "Family"}, {"name": "Dad", "rel": 100, "type": "Family"}]
         self.married_to = None
         self.children = []
-        self.skills = {} # {"Coding": 1, "Teaching": 0}
+        self.skills = {}
+        self.inventory = {} # For life orbs and other items
         
         self.log_history = [f"{SPRITES['Baby']} Born a {self.gender} in the Year 3000."]
         self.scenario = None
         self.game_over_reason = None
+        self.life_orb_locations = [] # Reset orb locations on new game
 
     def log(self, text, icon=""):
         self.log_history.insert(0, f"Age {self.age}: {icon} {text}")
@@ -156,7 +159,8 @@ class SimEngine:
         current_val = getattr(self, stat_name)
         new_val = current_val + amount
         
-        if not allow_below_min and new_val < min_val: new_val = min_val
+        if not allow_below_min:
+            if new_val < min_val: new_val = min_val
         if new_val > max_val: new_val = max_val
         
         setattr(self, stat_name, new_val)
@@ -164,210 +168,202 @@ class SimEngine:
 
     def age_up(self):
         if not self.alive: return
-        
         self.age += 1
-        self.buzz(0.03) # Subtle haptic feedback for aging
+        self.buzz(0.03)
 
-        # 1. JAIL LOGIC
+        self.adjust_stat("energy", -5) # natural energy decay
+        self.adjust_stat("stress", random.randint(-2, 5)) # random stress changes
+        self.adjust_stat("hlt", -1) # natural health decay
+        
         if self.jail > 0:
             self.jail -= 1
             self.adjust_stat("hap", -15)
             self.adjust_stat("stress", 20)
             self.log(f"Serving time ({self.jail} yrs left).", SPRITES['Jail'])
             if self.jail == 0: self.log("Released from prison!", "🔓"); self.adjust_stat("stress", -30)
-            self.check_death() # Can die in jail
+            self.check_death()
             return
 
-        # 2. EDUCATION PROGRESS
         if self.current_education:
             self.education_years_left -= 1
             self.adjust_stat("smrt", self.current_education['smrt_gain'] / self.current_education['duration'])
             self.adjust_stat("stress", 10)
-            # Ensure cost is divided over duration and only paid if money is available
             yearly_cost = self.current_education['cost'] / self.current_education['duration']
+            
             if self.money >= yearly_cost:
                 self.adjust_stat("money", -yearly_cost, allow_below_min=True)
             else:
-                self.log(f"Couldn't afford yearly tuition for {self.current_education['degree']}. Dropped out.", SPRITES['Sad'])
-                self.adjust_stat("smrt", -10) # Penalty for missed payment and dropping out
-                self.adjust_stat("stress", 20)
-                self.education = "None" # Reset education status
-                self.current_education = None # Clear current education
-                self.education_years_left = 0
-                return # Skip further actions this year if dropped out
+                self.log(f"Couldn't afford tuition. Dropped out.", SPRITES['Sad'])
+                self.adjust_stat("smrt", -10)
+                self.education = "None"
+                self.current_education = None
+                # Check for required degree for job
+                if self.career != "Unemployed":
+                    job_data = JOBS.get(self.career)
+                    if job_data and job_data.get('req_degree') and self.education != job_data['req_degree']:
+                        self.log(f"Lost {self.career} job due to insufficient education.", SPRITES['Layoff'])
+                        self.career = "Unemployed"
+                return
 
             self.log(f"Studying for {self.current_education['degree']} ({self.education_years_left} yrs left).", SPRITES['Study'])
             if self.education_years_left <= 0:
                 self.education = self.current_education['degree']
                 self.log(f"Graduated with a {self.education}!", SPRITES['Degree'])
                 self.current_education = None
-                self.adjust_stat("smrt", 10) # Bonus for completion
-                self.adjust_stat("stress", -20)
+                self.adjust_stat("smrt", 10)
         
-        # 3. CAREER PROGRESS & INCOME
-        if self.career != "Unemployed" and not self.current_education: # Can't work full-time while studying
+        if self.career != "Unemployed" and not self.current_education:
             job_data = JOBS.get(self.career)
             if job_data:
-                sal_factor = 1 + (self.skills.get("Leadership", 0) * 0.05) + (self.smrt / 200) # Skills & Smrt boost salary
+                sal_factor = 1 + (self.skills.get("Leadership", 0) * 0.05) + (self.smrt / 200)
                 base_sal = job_data['sal'] * sal_factor
                 tax_rate = 0.3 if base_sal > 100000 else 0.15
                 net = int(base_sal * (1 - tax_rate))
                 self.money += net
                 self.adjust_stat("stress", job_data['stress'] / 10)
-                
+                self.adjust_stat("hap", 2) # small happiness boost from working
                 self.log(f"Earned ${net:,} from {self.career}.", SPRITES['Money'])
 
-                # Promotion/Layoff Chance
                 if random.random() < job_data['promo_chance']:
-                    self.log(f"Got a promotion at {self.career}!", SPRITES['Promotion'])
-                    self.adjust_stat("money", 5000, allow_below_min=True); self.adjust_stat("hap", 10); self.adjust_stat("fame", 5); self.adjust_stat("stress", -10)
+                    self.log(f"Got a promotion! Salary increased!", SPRITES['Promotion'])
+                    job_data['sal'] = int(job_data['sal'] * 1.1) # Small salary increase
+                    self.adjust_stat("money", 5000, allow_below_min=True); self.adjust_stat("hap", 10)
                 elif random.random() < job_data['layoff_chance']:
                     self.log(f"Laid off from {self.career}!", SPRITES['Layoff'])
-                    self.career = "Unemployed"; self.adjust_stat("hap", -20); self.adjust_stat("stress", 30); self.adjust_stat("fame", -5)
+                    self.career = "Unemployed"; self.adjust_stat("stress", 30)
         
-        # 4. ASSET SIMULATION & UPKEEP
         assets_to_remove = []
         for i, asset in enumerate(self.assets):
             props = asset['props']
+            upkeep = props.get('upkeep', 0)
+            
+            if self.money >= upkeep: self.money -= upkeep
+            else:
+                self.log(f"Couldn't afford upkeep for {asset['name']}. Value depreciated.", SPRITES['Sad'])
+                asset['val'] = int(asset['val'] * 0.9) # Penalty for not paying upkeep
+                self.adjust_stat("stress", 5)
+
             if asset['type'] == 'House':
                 asset['val'] = int(asset['val'] * (1 + props.get('appreciation', 0.0)))
-                upkeep = props.get('upkeep', 0)
-                if self.money >= upkeep:
-                    self.money -= upkeep
-                    if upkeep > 0: self.log(f"Paid ${upkeep:,} upkeep for {asset['name']}.", SPRITES['Money'])
-                else:
-                    self.log(f"Couldn't afford upkeep for {asset['name']}. Asset value decreased.", SPRITES['Sad'])
-                    asset['val'] = int(asset['val'] * 0.9) # Penalty for not paying upkeep
             elif asset['type'] == 'Car':
                 asset['val'] = int(asset['val'] * (1 - props.get('depreciation', 0.0)))
-                upkeep = props.get('upkeep', 0)
-                if self.money >= upkeep:
-                    self.money -= upkeep
-                    if upkeep > 0: self.log(f"Paid ${upkeep:,} for {asset['name']} maintenance.", SPRITES['Money'])
-                else:
-                    self.log(f"Couldn't afford maintenance for {asset['name']}. Car deteriorated.", SPRITES['Sad'])
-                    asset['val'] = int(asset['val'] * 0.8) # Penalty for not maintaining
-                if asset['val'] < 1000 and random.random() < 0.2: # Old car breaks down
-                    self.log(f"{asset['name']} broke down and sold for scrap.", SPRITES['Sad'])
-                    self.money += 200 # Scrap value
+                if asset['val'] < 1000 and random.random() < 0.2:
+                    self.log(f"{asset['name']} broke down beyond repair.", SPRITES['Sad'])
                     assets_to_remove.append(i)
             elif asset['type'] in ['Stocks', 'Crypto']:
                 change = (random.random() * 2 - 1) * props.get('volatility', 0) * asset['val']
                 asset['val'] += int(change)
-                asset['val'] = max(1, asset['val']) # Cannot go below 1
-                if change > 0: self.log(f"{asset['name']} gained ${int(change):,}.", SPRITES['Stocks'])
-                else: self.log(f"{asset['name']} lost ${int(abs(change)):,}.", "📉")
+                asset['val'] = max(1, asset['val'])
 
-        for i in reversed(assets_to_remove):
-            self.assets.pop(i)
+        for i in reversed(assets_to_remove): self.assets.pop(i)
 
-        # 5. CORE STAT DECAY / REGENERATION
-        self.adjust_stat("energy", -random.randint(5, 15), allow_below_min=True)
-        self.adjust_stat("energy", 30) # Sleep
-        self.adjust_stat("stress", -random.randint(5, 10)) # Passive stress relief
-        
-        if self.stress > 70: self.adjust_stat("hap", -10); self.adjust_stat("hlt", -5); self.log("High stress impacting health & mood.", SPRITES['Stress'])
-        if self.energy < 20: self.adjust_stat("hap", -5); self.adjust_stat("hlt", -5); self.log("Low energy makes you feel sluggish.", SPRITES['Energy'])
-        if self.hap < 30: self.adjust_stat("stress", 10); self.log("Unhappiness causing more stress.", SPRITES['Sad'])
+        self.adjust_stat("energy", 30) # daily energy regeneration
+        self.adjust_stat("stress", -5) # passive stress reduction if no major events
 
-        # 6. RELATIONSHIPS & FAMILY
+        # Negative effects of extreme stats
+        if self.stress > 80: self.adjust_stat("hlt", -5); self.adjust_stat("hap", -10); self.log("High stress is taking a toll.", SPRITES['Stress'])
+        if self.energy < 10: self.adjust_stat("hlt", -5); self.adjust_stat("stress", 10); self.log("Low energy makes you feel unwell.", SPRITES['Energy'])
+        if self.hlt < 20: self.adjust_stat("hap", -10); self.adjust_stat("stress", 10); self.log("Poor health affects your mood.", SPRITES['Sick'])
+        if self.hap < 20: self.adjust_stat("stress", 5); self.log("Unhappiness adds to your stress.", SPRITES['Sad'])
+
         for r in self.relations:
-            if r['type'] == 'Family' or r['type'] == 'Spouse':
-                self.adjust_stat("hap", r['rel'] / 200) # Passive happiness from good relations
-                if random.random() < 0.02: # Small chance of relationship decay
-                    r['rel'] = max(0, r['rel'] - 5)
-                    self.log(f"Relationship with {r['name']} declined slightly.", SPRITES['Sad'])
-        
-        # Children age up
-        for child in self.children:
-            child['age'] += 1
-            if child['age'] % 5 == 0: self.log(f"Your child {child['name']} is now {child['age']}!", SPRITES['Child'])
+            if r['type'] in ['Family', 'Spouse']:
+                self.adjust_stat("hap", r['rel'] / 200) # Small happiness boost from good relations
+                if random.random() < 0.03 and r['rel'] > 20: 
+                    r['rel'] = max(0, r['rel'] - random.randint(5, 15)) # Small chance of relationship decay
+                    self.log(f"Relationship with {r['name']} deteriorated a little.", SPRITES['Sad'])
+            elif r['type'] == 'Child':
+                if random.random() < 0.05 and r['rel'] > 20: 
+                    r['rel'] = max(0, r['rel'] - random.randint(5, 10))
+                self.adjust_stat("hap", r['rel'] / 300)
 
-        # 7. RANDOM EVENTS
+        for child in self.children: child['age'] += 1
+
         self.run_random_events()
-
-        # 8. DEATH CHECK
+        self.spawn_life_orbs()
         self.check_death()
 
     def check_death(self):
         if not self.alive: return
-
         death_chance = 0.0
         death_reason = ""
 
-        # Age-related death
-        if self.age > 80:
-            death_chance += (self.age - 80) * 0.03
-            death_reason = "old age"
+        if self.age > 80: death_chance += (self.age - 80) * 0.03; death_reason = "old age"
+        if self.hlt <= 0: death_chance += 1.0; death_reason = "poor health"
+        elif self.hlt < 20: death_chance += 0.1; death_reason = "critical health"
+        if self.stress >= 95 and random.random() < 0.1: death_chance += 0.5; death_reason = "stress-induced collapse"
+        if self.energy <= 0: death_chance += 0.05; death_reason = "exhaustion"
         
-        # Health-related death
-        if self.hlt <= 0:
-            death_chance += 1.0 # Guaranteed death
-            death_reason = "poor health"
-        elif self.hlt < 20:
-            death_chance += 0.1
-            death_reason = "critical health"
-        
-        # Stress-related death (e.g., heart attack)
-        if self.stress >= 95 and random.random() < 0.1:
-            death_chance += 0.5
-            death_reason = "stress-induced complications"
-
-        # Jail death
-        if self.jail > 0 and random.random() < 0.08: # Higher chance to die in jail
-            death_chance += 0.3
-            death_reason = "prison incident"
-            
-        # Random unexpected death (always a small chance)
-        if random.random() < 0.005:
+        # Random accidents
+        if random.random() < 0.005 and self.age >= 16:
             death_chance += 0.2
-            death_reason = random.choice(["freak accident", "sudden illness"])
+            death_reason = random.choice(["car accident", "freak accident", "crime victim"])
 
         if random.random() < death_chance:
             self.alive = False
             self.face = SPRITES['Dead']
             self.game_over_reason = death_reason
-            self.log(f"Died from {death_reason}. Net Worth: ${self.get_net_worth():,}", SPRITES['Dead'])
-            self.buzz(1.0) # Long vibration on death
-            self.dialog_queue.append(("Game Over!", f"You died at age {self.age} from {death_reason}. Your final net worth was ${self.get_net_worth():,}.", [("New Game", self.reset_game)]))
-
+            self.log(f"Died at age {self.age} from {death_reason}.", SPRITES['Dead'])
+            self.buzz(1.0)
+            self.dialog_queue.append(("Game Over!", f"You died at age {self.age} from {death_reason}. Net Worth: ${self.get_net_worth():,}.", [("New Game", self.reset_game)]))
 
     def run_random_events(self):
         roll = random.random()
-        if roll < 0.05 and self.hlt > 20: # Sickness
-            self.adjust_stat("hlt", -random.randint(10, 25))
-            self.log("Contracted a virus. Feeling unwell.", SPRITES['Sick'])
-            self.buzz(0.2)
-        elif roll < 0.10 and self.hap > 20: # Depression
-            self.adjust_stat("hap", -random.randint(10, 20))
-            self.adjust_stat("stress", 15)
-            self.log("Feeling depressed and demotivated.", SPRITES['Sad'])
-        elif roll < 0.15: # Found money
-            prize = random.randint(100, 1000)
-            self.money += prize
-            self.log(f"Found ${prize} on the street.", SPRITES['Money'])
-            self.buzz(0.05)
-        elif roll < 0.18: # Lost money
-            if self.money > 200:
-                lost = random.randint(50, 200)
-                self.money -= lost
-                self.log(f"Lost ${lost} from a scam.", "💸")
-                self.adjust_stat("hap", -5)
-            else: self.log("Luckily, you had no money to lose to a scam.", "😅")
-        elif roll < 0.22 and self.age >= 18: # Wallet scenario
-            self.scenario = "wallet" # Trigger Popup
-        elif roll < 0.25 and self.career == "Unemployed" and self.age >= 18: # Temp Job Offer
-            self.log("Got a temporary job offer, but it pays low. (+500)", SPRITES['Job'])
-            self.money += 500
-            self.adjust_stat("hap", 5)
-        elif roll < 0.28 and self.married_to: # Spouse gift
-            gift_val = random.randint(100, 1000)
-            self.money += gift_val
-            self.adjust_stat("hap", 5)
-            self.log(f"Your spouse {self.married_to} bought you a gift worth ${gift_val}.", SPRITES['Love'])
-        elif roll < 0.30 and self.age > 60 and self.hlt < 80: # Health scare
-            self.log("Experienced a minor health scare. Should see a doctor soon.", SPRITES['Doc'])
-            self.adjust_stat("stress", 10)
+        if roll < 0.03: # Higher chance for sickness
+            self.adjust_stat("hlt", -random.randint(10, 25)); self.adjust_stat("energy", -10);
+            self.log("Caught a nasty flu.", SPRITES['Sick'])
+            if self.age > 60: self.log("The flu is hitting harder due to age.", SPRITES['Sad'])
+        elif roll < 0.08: prize = random.randint(100, 1000); self.money += prize; self.log(f"Found ${prize}!", SPRITES['Money'])
+        elif roll < 0.10 and self.age >= 18: self.scenario = "wallet" # Scenario with choices
+        elif roll < 0.12 and self.age >= 18 and self.career == "Unemployed": # Job Opportunity
+            self.scenario = "job_offer"
+        elif roll < 0.15 and self.age >= 16: # Relationship event
+            if not self.married_to and random.random() < 0.5:
+                partner_name = random.choice(["Alex", "Jamie", "Chris", "Taylor"])
+                self.relations.append({"name": partner_name, "rel": random.randint(50, 80), "type": "Partner"})
+                self.log(f"Met {partner_name}, a potential partner!", SPRITES['Love'])
+            elif self.married_to:
+                self.adjust_stat("hap", 5)
+                self.log(f"Shared a nice moment with {self.married_to}.", SPRITES['Love'])
+
+    def spawn_life_orbs(self):
+        if len(self.life_orb_locations) < self.MAX_LIFE_ORBS and random.random() < 0.1: # 10% chance to spawn an orb each year
+            orb_type = random.choice(list(LIFE_ORBS.keys()))
+            location_options = ["Park", "Old bookstore", "Mountain trail", "Quiet cafe", "City alley"]
+            location = random.choice(location_options)
+            self.life_orb_locations.append({"type": orb_type, "location": location})
+            self.log(f"A {orb_type} has appeared in the {location}!", LIFE_ORBS[orb_type]['icon'])
+
+    def discover_life_orb(self):
+        if not self.life_orb_locations:
+            self.log("No life orbs currently available to discover.", SPRITES['Sad'])
+            return False
+        
+        orb_found = random.choice(self.life_orb_locations)
+        self.life_orb_locations.remove(orb_found)
+        
+        orb_type = orb_found['type']
+        orb_data = LIFE_ORBS[orb_type]
+        
+        if orb_type not in self.inventory:
+            self.inventory[orb_type] = 0
+        self.inventory[orb_type] += 1
+        
+        self.log(f"Discovered a {orb_type} in the {orb_found['location']}!", orb_data['icon'])
+        self.dialog_queue.append((f"Found a {orb_type}!", f"You found a {orb_type} at the {orb_found['location']}. It's been added to your inventory.", []))
+        return True
+
+    def use_life_orb(self, orb_type):
+        if orb_type in self.inventory and self.inventory[orb_type] > 0:
+            orb_data = LIFE_ORBS[orb_type]
+            for stat, amount in orb_data['effect'].items():
+                self.adjust_stat(stat, amount)
+            self.inventory[orb_type] -= 1
+            self.log(f"Used a {orb_type}. {orb_data['description']}", orb_data['icon'])
+            return True
+        self.log(f"No {orb_type} in inventory.", SPRITES['Sad'])
+        return False
+
 
     def get_net_worth(self):
         return self.money + sum(a['val'] for a in self.assets)
@@ -376,29 +372,25 @@ class SimEngine:
         return self.skills.get(skill_name, 0)
 
     def reset_game(self):
-        self.generate_initial_stats() # Generate new stats for the next character
-        self.char_name = "" # Clear character details
-        self.char_gender = "Male" # Reset to default for next creation
-        self.reset() # Reset game state using new initial stats
+        self.generate_initial_stats()
+        self.char_name = ""
+        self.char_gender = "Male"
+        self.reset()
         app = MDApp.get_running_app()
-        app.root.current = 'char_create' # Go back to character creation screen
+        app.root.current = 'char_create'
 
 # --- UI COMPONENTS ---
-
-# RecycleView item for game log
 class LogEntryViewClass(RecycleDataViewBehavior, MDLabel):
-    """A simple MDLabel that acts as a view for RecycleView data."""
     def refresh_view_attrs(self, rv, index, data):
         self.text = data['text']
         self.halign = 'left'
         self.valign = 'middle'
         self.size_hint_y = None
-        self.height = dp(32) # Standard height for one-line items
+        self.height = dp(32)
         self.theme_text_color = "Primary"
-        self.markup = True # Allow color tags in text
+        self.markup = True
         return super().refresh_view_attrs(rv, index, data)
 
-# RecycleView item for menu lists
 class SelectableTwoLineIconListItem(RecycleDataViewBehavior, ButtonBehavior, MDBoxLayout):
     text = StringProperty()
     secondary_text = StringProperty()
@@ -409,26 +401,13 @@ class SelectableTwoLineIconListItem(RecycleDataViewBehavior, ButtonBehavior, MDB
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.orientation = 'vertical'
-        self.padding = [dp(10), dp(5)] # Left/Right, Top/Bottom
+        self.padding = [dp(10), dp(5)]
         self.spacing = dp(2)
         self.size_hint_y = None
-        self.height = dp(64) # Typical height for two-line item
+        self.height = dp(64)
 
-        self.primary_label = MDLabel(
-            markup=True,
-            font_style="Subtitle1",
-            theme_text_color="Primary",
-            text_size=(self.width - dp(20), None), # Adjusted for padding
-            valign="middle"
-        )
-        self.secondary_label = MDLabel(
-            markup=True,
-            font_style="Caption",
-            theme_text_color="Secondary",
-            text_size=(self.width - dp(20), None), # Adjusted for padding
-            valign="middle"
-        )
-        self.clear_widgets() # Ensure no default widgets are added
+        self.primary_label = MDLabel(markup=True, font_style="Subtitle1", theme_text_color="Primary", size_hint_y=0.6)
+        self.secondary_label = MDLabel(markup=True, font_style="Caption", theme_text_color="Secondary", size_hint_y=0.4)
         self.add_widget(self.primary_label)
         self.add_widget(self.secondary_label)
 
@@ -443,11 +422,11 @@ class SelectableTwoLineIconListItem(RecycleDataViewBehavior, ButtonBehavior, MDB
         if self.disabled:
             self.primary_label.text = f"[color=808080]{main_text_content}[/color]"
             self.secondary_label.text = f"[color=808080]{self.secondary_text}[/color]"
-            self.md_bg_color = [0.15, 0.15, 0.15, 1] # Darker bg for disabled
+            self.md_bg_color = [0.15, 0.15, 0.15, 1]
         else:
             self.primary_label.text = main_text_content
             self.secondary_label.text = self.secondary_text
-            self.md_bg_color = [0.2, 0.2, 0.2, 1] # Normal bg
+            self.md_bg_color = [0.2, 0.2, 0.2, 1]
 
         return super().refresh_view_attrs(rv, index, data)
 
@@ -459,208 +438,138 @@ class StatBar(MDBoxLayout):
     lbl_text = StringProperty("")
     bar_value = NumericProperty(0)
     bar_color = ListProperty([0, 0, 0, 1])
-    is_percent = BooleanProperty(True) # New property
+    is_percent = BooleanProperty(True)
 
     def __init__(self, label, value, color, is_percent=True, **kwargs):
         super().__init__(orientation='vertical', size_hint_x=0.25, **kwargs)
         self.is_percent = is_percent
-        self.update_label_text(label, value) # Helper to set text
+        self.update_label_text(label, value)
         self.bar_value = value
         self.bar_color = color
-        
         self.lbl = MDLabel(text=self.lbl_text, halign="center", font_style="Caption", theme_text_color="Custom", text_color=color)
         self.add_widget(self.lbl)
         self.bar = MDProgressBar(value=self.bar_value, color=self.bar_color, size_hint_y=None, height="6dp")
         self.add_widget(self.bar)
 
     def update_label_text(self, label_base, value):
-        if self.is_percent:
-            display_val = max(0, min(100, value)) # Clamp for % display
-            self.lbl_text = f"{label_base}: {int(display_val)}%"
-        else:
-            self.lbl_text = f"{label_base}: {int(value)}" # Display raw value
+        display_val = max(0, min(100, value))
+        self.lbl_text = f"{label_base}: {int(display_val)}%" if self.is_percent else f"{label_base}: {int(value)}"
     
     def update(self, val):
         label_base = self.lbl.text.split(':')[0]
         self.update_label_text(label_base, val)
-        
-        # Clamp bar value to 0-100 for visual consistency of the progress bar
-        bar_val_clamped = max(0, min(100, val))
-        self.bar.value = bar_val_clamped
+        self.bar.value = max(0, min(100, val))
 
-# --- CHARACTER CREATION SCREEN ---
+# --- SCREENS ---
 class CharacterCreationScreen(Screen):
-    selected_gender = StringProperty("Male") # Default selected gender
+    selected_gender = StringProperty("Male")
 
     def on_enter(self):
         self.app = MDApp.get_running_app()
         self.engine = self.app.engine
-        self.engine.generate_initial_stats() # Always generate fresh stats when entering screen
+        self.engine.generate_initial_stats() # Ensure stats are fresh for display
         self.build_ui()
-        self.update_stats_display()
 
     def build_ui(self):
         self.clear_widgets()
         layout = MDBoxLayout(orientation='vertical', padding=dp(20), spacing=dp(15))
-        
         layout.add_widget(MDLabel(text="CREATE YOUR CHARACTER", font_style="H4", halign="center", size_hint_y=0.15))
 
-        # Name Input
-        self.name_input = MDTextField(
-            id='name_input',
-            hint_text="Enter Name",
-            helper_text="First and Last Name",
-            helper_text_mode="on_focus",
-            max_text_length=30,
-            size_hint_y=None,
-            height=dp(48)
-        )
-        self.name_input.text = self.engine.char_name if self.engine.char_name else random.choice(['Liam','Noah','Oliver','James','Emma','Ava']) + ' ' + random.choice(['Smith','Jones','Brown','Garcia'])
+        self.name_input = MDTextField(hint_text="Enter Name", text=self.engine.char_name, size_hint_y=None, height=dp(48))
         layout.add_widget(self.name_input)
 
-        # Gender Selection
         gender_box = MDBoxLayout(size_hint_y=None, height=dp(48), spacing=dp(10))
-        self.btn_male = MDFillRoundFlatButton(
-            text=f"{SPRITES['Male']} Male",
-            on_release=lambda x: self.select_gender("Male")
-        )
-        self.btn_female = MDFillRoundFlatButton(
-            text=f"{SPRITES['Female']} Female",
-            on_release=lambda x: self.select_gender("Female")
-        )
+        self.btn_male = MDFillRoundFlatButton(text=f"{SPRITES['Male']} Male", on_release=lambda x: self.select_gender("Male"))
+        self.btn_female = MDFillRoundFlatButton(text=f"{SPRITES['Female']} Female", on_release=lambda x: self.select_gender("Female"))
         gender_box.add_widget(self.btn_male)
         gender_box.add_widget(self.btn_female)
         layout.add_widget(gender_box)
 
-        # Stat Display Area
-        stats_display_layout = MDBoxLayout(orientation='vertical', size_hint_y=0.3, padding=dp(10), spacing=dp(5),
-                                           md_bg_color=[0.15,0.15,0.15,1], radius=[dp(10)])
-        stats_display_layout.add_widget(MDLabel(text="[color=#FFFFFF]Initial Stats:[/color]", markup=True, font_style="Subtitle1"))
-        
-        self.stat_labels = {}
-        for stat_name, color, is_percent in [("Smrt", (0,0,1,1), True), ("Look", (1,0.5,0,1), True), 
-                                             ("Hap", (0,1,0,1), True), ("Hlt", (1,0,0,1), True),
-                                             ("Karma", (0.5,0,0.5,1), False), ("Stress", (0.8,0.4,0,1), True)]:
-            lbl = MDLabel(text="", theme_text_color="Custom", text_color=color, markup=True)
-            self.stat_labels[stat_name] = lbl
-            stats_display_layout.add_widget(lbl)
-        
-        layout.add_widget(stats_display_layout)
+        # Display initial stats
+        stats_grid = MDBoxLayout(orientation='vertical', size_hint_y=0.4, spacing=dp(5))
+        stats_grid.add_widget(MDLabel(text=f"Initial Smarts: {self.engine.initial_smrt}%", halign="center"))
+        stats_grid.add_widget(MDLabel(text=f"Initial Looks: {self.engine.initial_look}%", halign="center"))
+        stats_grid.add_widget(MDLabel(text=f"Initial Happiness: {self.engine.initial_hap}%", halign="center"))
+        stats_grid.add_widget(MDLabel(text=f"Initial Health: {self.engine.initial_hlt}%", halign="center"))
+        layout.add_widget(stats_grid)
 
-        # Action Buttons
-        button_box = MDBoxLayout(size_hint_y=0.2, spacing=dp(10))
-        btn_randomize = MDRectangleFlatButton(text="Randomize Stats", on_release=self.randomize_stats)
-        btn_start = MDFillRoundFlatButton(text="START GAME", on_release=self.start_game)
-        button_box.add_widget(btn_randomize)
-        button_box.add_widget(btn_start)
-        layout.add_widget(button_box)
-
+        btn_start = MDFillRoundFlatButton(text="START GAME", on_release=self.start_game, size_hint_y=None, height=dp(50))
+        layout.add_widget(btn_start)
         self.add_widget(layout)
-        self.select_gender(self.engine.char_gender) # Update initial gender selection
-        self.update_stats_display()
+        self.select_gender(self.engine.char_gender)
 
     def select_gender(self, gender):
         self.selected_gender = gender
-        self.engine.char_gender = gender # Update engine's default for face sprite
-        # Visually update selected button
-        self.btn_male.md_bg_color = (0.2, 0.2, 0.2, 1) if gender == "Female" else MDApp.get_running_app().theme_cls.primary_color
-        self.btn_female.md_bg_color = (0.2, 0.2, 0.2, 1) if gender == "Male" else MDApp.get_running_app().theme_cls.primary_color
-        
-    def randomize_stats(self, *args):
-        self.engine.generate_initial_stats()
-        self.update_stats_display()
-
-    def update_stats_display(self):
-        e = self.engine
-        self.stat_labels["Smrt"].text = f"[color={self.stat_labels['Smrt'].text_color}]🧠 Smartness: {e.initial_smrt}%[/color]"
-        self.stat_labels["Look"].text = f"[color={self.stat_labels['Look'].text_color}]😎 Looks: {e.initial_look}%[/color]"
-        self.stat_labels["Hap"].text = f"[color={self.stat_labels['Hap'].text_color}]😃 Happiness: {e.initial_hap}%[/color]"
-        self.stat_labels["Hlt"].text = f"[color={self.stat_labels['Hlt'].text_color}]❤️ Health: {e.initial_hlt}%[/color]"
-        self.stat_labels["Karma"].text = f"[color={self.stat_labels['Karma'].text_color}]⚖️ Karma: {e.initial_karma}[/color]"
-        self.stat_labels["Stress"].text = f"[color={self.stat_labels['Stress'].text_color}]🤯 Stress: {e.initial_stress}%[/color]"
-
+        self.engine.char_gender = gender
+        # Highlight selected gender
+        self.btn_male.md_bg_color = self.app.theme_cls.primary_color if gender == "Male" else (0.2, 0.2, 0.2, 1)
+        self.btn_female.md_bg_color = self.app.theme_cls.primary_color if gender == "Female" else (0.2, 0.2, 0.2, 1)
 
     def start_game(self, *args):
         name = self.name_input.text.strip()
         if not name:
-            name = random.choice(['Liam','Noah','Oliver','James','Emma','Ava']) + ' ' + random.choice(['Smith','Jones','Brown','Garcia'])
-            self.name_input.text = name # Set a default name if user leaves it empty
-        
+            name = f"{random.choice(['Liam','Noah','Oliver','James','Emma','Ava'])} {random.choice(['Smith','Jones','Brown','Garcia'])}"
         self.engine.set_character_details(name, self.selected_gender)
-        # The engine's reset() will use these details and the pre-generated initial stats
-        self.app.engine.reset() # This reset uses the newly set char_name, char_gender and initial_stats
-        
-        # Build and update game UI then switch screen
+        self.app.engine.reset() # Reset engine with new character details
         self.app.root.get_screen('game').build_ui()
-        self.app.root.get_screen('game').update()
         self.app.root.current = 'game'
 
-# --- MAIN SCREEN ---
 class GameScreen(Screen):
     def on_enter(self):
         self.app = MDApp.get_running_app()
         self.engine = self.app.engine
-        self._current_dialog = None # Initialize dialog state for safer checking
-        # build_ui is called by CharacterCreationScreen.start_game, so it should be built
-        # self.build_ui() # This line should not be needed here anymore if char creation handles it
-        Clock.schedule_interval(self.check_dialog_queue, 0.5)
+        self._current_dialog = None
+        Clock.schedule_interval(self.check_dialog_queue, 0.5) # Check for dialogs more frequently
+        if not self.ids: # Ensure UI is built if not already (e.g., first entry)
+             self.build_ui()
+        self.update() # Initial update when entering screen
 
     def build_ui(self):
-        # This method is now called externally after character creation or on new game reset
         self.clear_widgets()
         root = MDBoxLayout(orientation='vertical', padding=[dp(10), dp(5)], spacing=dp(5))
 
-        # IDENTITY HEADER
         head = MDBoxLayout(orientation='horizontal', size_hint_y=0.15)
-        self.lbl_face = MDLabel(text=self.engine.face, font_style="H2", size_hint_x=0.2, halign="center")
-        info = MDBoxLayout(orientation='vertical', padding=[dp(5), 0, 0, 0])
-        self.lbl_name = MDLabel(text="Name", font_style="H6", bold=True)
-        self.lbl_job = MDLabel(text="Job", theme_text_color="Secondary")
-        self.lbl_bank = MDLabel(text="$$$", theme_text_color="Custom", text_color=(0,1,0,1))
+        self.lbl_face = MDLabel(text=self.engine.face, font_style="H2", size_hint_x=0.2, halign="center", id='lbl_face')
+        info = MDBoxLayout(orientation='vertical')
+        self.lbl_name = MDLabel(text="Name", font_style="H6", bold=True, id='lbl_name')
+        self.lbl_job = MDLabel(text="Job", theme_text_color="Secondary", id='lbl_job')
+        self.lbl_bank = MDLabel(text="$$$", theme_text_color="Custom", text_color=(0,1,0,1), id='lbl_bank')
         info.add_widget(self.lbl_name); info.add_widget(self.lbl_job); info.add_widget(self.lbl_bank)
         head.add_widget(self.lbl_face); head.add_widget(info)
         root.add_widget(head)
 
-        # SCROLLABLE LOG using RecycleView for performance
-        scroll = MDScrollView(size_hint=(1, 0.45))
-        self.log_rv = RecycleView(viewclass=LogEntryViewClass)
-        self.log_rv.data = [] # Initial empty data
+        self.log_rv = RecycleView(viewclass=LogEntryViewClass, size_hint=(1, 0.45), id='log_rv')
         self.log_rv_layout = RecycleBoxLayout(default_size=(None, dp(32)), default_size_hint=(1, None),
-                                                orientation='vertical', size_hint_y=None, spacing=dp(2))
+                                                orientation='vertical', size_hint_y=None)
+        self.log_rv_layout.bind(minimum_height=self.log_rv_layout.setter('height'))
         self.log_rv.add_widget(self.log_rv_layout)
-        scroll.add_widget(self.log_rv)
-        root.add_widget(scroll)
+        root.add_widget(self.log_rv)
 
-        # AGE BUTTON
-        age_box = MDBoxLayout(padding=[dp(30), dp(5)], size_hint=(1, 0.12))
-        self.age_button = MDFillRoundFlatButton(text="AGE UP +", font_size=26, size_hint=(1, 1), md_bg_color=(0, 0.7, 0, 1), on_release=self.do_age)
-        age_box.add_widget(self.age_button)
-        root.add_widget(age_box)
+        self.age_button = MDFillRoundFlatButton(text="AGE UP +", font_size=26, size_hint=(1, 0.12), md_bg_color=(0, 0.7, 0, 1), on_release=self.do_age, id='age_button')
+        root.add_widget(self.age_button)
 
-        # STAT BARS (2 rows for more stats)
         stats_row1 = MDBoxLayout(size_hint_y=0.08, spacing=dp(5))
-        self.s_hap = StatBar("Hap", 100, (0,1,0,1))
-        self.s_hlt = StatBar("Hlt", 100, (1,0,0,1))
-        self.s_smrt = StatBar("Smrt", 100, (0,0,1,1))
-        self.s_lok = StatBar("Look", 100, (1,0.5,0,1))
+        self.s_hap = StatBar("Hap", 100, (0,1,0,1), id='s_hap')
+        self.s_hlt = StatBar("Hlt", 100, (1,0,0,1), id='s_hlt')
+        self.s_smrt = StatBar("Smrt", 100, (0,0,1,1), id='s_smrt')
+        self.s_lok = StatBar("Look", 100, (1,0.5,0,1), id='s_lok')
         stats_row1.add_widget(self.s_hap); stats_row1.add_widget(self.s_hlt)
         stats_row1.add_widget(self.s_smrt); stats_row1.add_widget(self.s_lok)
         root.add_widget(stats_row1)
         
         stats_row2 = MDBoxLayout(size_hint_y=0.08, spacing=dp(5))
-        self.s_karma = StatBar("Karma", 0, (0.5, 0, 0.5, 1), is_percent=False) # Purple
-        self.s_stress = StatBar("Stress", 20, (0.8, 0.4, 0, 1)) # Orange
-        self.s_energy = StatBar("Energy", 100, (0, 0.8, 0.8, 1)) # Cyan
-        self.s_fame = StatBar("Fame", 0, (1, 0.8, 0, 1), is_percent=False) # Gold
+        self.s_karma = StatBar("Karma", 0, (0.7, 0.7, 0.7, 1), is_percent=False, id='s_karma')
+        self.s_stress = StatBar("Stress", 0, (1, 0, 1, 1), id='s_stress')
+        self.s_energy = StatBar("Energy", 100, (1, 1, 0, 1), id='s_energy')
+        self.s_fame = StatBar("Fame", 0, (0.9, 0.7, 0.2, 1), is_percent=False, id='s_fame')
         stats_row2.add_widget(self.s_karma); stats_row2.add_widget(self.s_stress)
         stats_row2.add_widget(self.s_energy); stats_row2.add_widget(self.s_fame)
         root.add_widget(stats_row2)
 
-        # MENU TABS
         nav = MDBoxLayout(size_hint_y=0.08, spacing=dp(2))
         nav.add_widget(MDRectangleFlatButton(text="JOB", size_hint=(0.25, 1), on_release=lambda x: self.menu("job")))
         nav.add_widget(MDRectangleFlatButton(text="ASSET", size_hint=(0.25, 1), on_release=lambda x: self.menu("asset")))
-        nav.add_widget(MDRectangleFlatButton(text="RELATION", size_hint=(0.25, 1), on_release=lambda x: self.menu("rel")))
+        nav.add_widget(MDRectangleFlatButton(text="REL", size_hint=(0.25, 1), on_release=lambda x: self.menu("rel")))
         nav.add_widget(MDRectangleFlatButton(text="ACT", size_hint=(0.25, 1), on_release=lambda x: self.menu("act")))
         root.add_widget(nav)
 
@@ -669,564 +578,382 @@ class GameScreen(Screen):
 
     def update(self, *args):
         e = self.engine
-        
-        # Disable age button if dead
         self.age_button.disabled = not e.alive
-        if not e.alive:
-            self.age_button.text = "GAME OVER!"
-            self.age_button.md_bg_color = (0.5, 0, 0, 1)
-
+        if not e.alive: self.age_button.text = f"GAME OVER! {e.game_over_reason.upper()}"
+        else: self.age_button.text = f"AGE UP ({e.age}) +"
+        
         self.lbl_face.text = e.face
         self.lbl_name.text = f"{e.name} ({e.age}) {e.gender}"
-        job_display = e.career
-        if e.current_education:
-            job_display += f" ({e.current_education['degree']} student)"
-        self.lbl_job.text = f"{job_display} | {e.education}"
-        self.lbl_bank.text = f"Bank: ${e.money:,} | Net: ${e.get_net_worth():,}"
+        self.lbl_job.text = f"{e.career} | {e.education}"
+        self.lbl_bank.text = f"${e.money:,} | Net: ${e.get_net_worth():,}"
         
         self.s_hap.update(e.hap); self.s_hlt.update(e.hlt)
         self.s_smrt.update(e.smrt); self.s_lok.update(e.look)
         self.s_karma.update(e.karma); self.s_stress.update(e.stress)
         self.s_energy.update(e.energy); self.s_fame.update(e.fame)
         
-        # Update RecycleView data efficiently
         self.log_rv.data = [{'text': txt} for txt in e.log_history[:50]]
-        # Scroll to top to show latest log entries
-        self.log_rv.scroll_y = 1 
+        self.log_rv.refresh_from_data() # Ensure RV updates visually
 
-        # NEURAL THEME ENGINE - More complex states
-        if e.hlt < 30 or e.stress > 80: self.app.theme_cls.primary_palette = "Red"     # Critical Health/Stress
-        elif e.jail > 0: self.app.theme_cls.primary_palette = "BlueGray"     # Jail
-        elif e.hap < 30: self.app.theme_cls.primary_palette = "Grey" # Unhappy
-        elif e.money > 5000000: self.app.theme_cls.primary_palette = "Amber" # Very Rich
-        elif e.fame > 50: self.app.theme_cls.primary_palette = "Yellow" # Famous
-        else: self.app.theme_cls.primary_palette = "DeepPurple"       # Normal
-
-        # Process dialog queue
         if e.dialog_queue and (self._current_dialog is None or not self._current_dialog.is_open):
             title, text, opts = e.dialog_queue.pop(0)
             self.show_popup(title, text, opts)
 
     def check_dialog_queue(self, dt):
-        self.update() # Update to ensure latest game state is reflected
+        self.update() # Update UI and check for dialogs
 
-    def do_age(self, *x):
-        self.engine.age_up()
-        self.update()
-        if self.engine.scenario == "wallet":
-            self.show_popup("Found Wallet", "You found a wallet with $500. What do you do?", [("Keep (Karma-)", self.scen_keep), ("Return (Karma+)", self.scen_ret)])
-            self.engine.scenario = None
-        
+    def do_age(self, *x): 
+        if self.engine.alive:
+            self.engine.age_up()
+            self.update()
+            # If a scenario was triggered during age_up, open it immediately
+            if self.engine.scenario:
+                if self.engine.scenario == "wallet": 
+                    self.show_popup("Found Wallet!", "You found a wallet with $500. What will you do?", [("Keep", self.scen_keep), ("Return", self.scen_ret)])
+                elif self.engine.scenario == "job_offer":
+                    job_offer_data = random.choice(list(JOBS.values()))
+                    self.show_popup("Job Offer!", f"A local company offered you a job as a {job_offer_data['icon']} {job_offer_data['sal']:,}/year. Do you accept?", [("Accept", lambda: self.scen_accept_job(job_offer_data)), ("Decline", self.scen_decline_job)])
+                self.engine.scenario = None # Clear scenario after handling
+
     def show_popup(self, title, text, opts):
+        # Dismiss existing dialog if any before showing a new one
+        if self._current_dialog and self._current_dialog.is_open:
+            self._current_dialog.dismiss()
+
         btns = []
         for o_text, o_func in opts:
-            btn = MDRectangleFlatButton(text=o_text, on_release=lambda x, f=o_func: self.run_scen(f))
-            btns.append(btn)
+            # Wrap the function call to dismiss the dialog
+            def _callback(f=o_func):
+                if self._current_dialog:
+                    self._current_dialog.dismiss()
+                    self._current_dialog = None
+                f()
+                self.update() # Ensure UI updates after dialog action
+            btns.append(MDRectangleFlatButton(text=o_text, on_release=_callback))
         
+        if not btns: # If no buttons provided, add a dismiss button
+            btns.append(MDRectangleFlatButton(text="OK", on_release=lambda x: self.dismiss_dialog_and_update()))
+
         self._current_dialog = MDDialog(title=title, text=text, buttons=btns, auto_dismiss=False)
         self._current_dialog.open()
 
-    def run_scen(self, func):
-        if self._current_dialog: # Ensure dialog exists before dismissing
+    def dismiss_dialog_and_update(self):
+        if self._current_dialog:
             self._current_dialog.dismiss()
-            self._current_dialog = None # Clear reference safely
-        func()
-        self.update() # Refresh after choice
+            self._current_dialog = None
+        self.update()
 
+    # Scenario handlers
     def scen_keep(self): 
-        self.engine.money+=500; self.engine.adjust_stat("hap", 10); self.engine.adjust_stat("karma", -10, min_val=-100, allow_below_min=True); 
-        self.engine.log("Kept wallet (Karma -10).", SPRITES['Money'])
-    def scen_ret(self): 
-        self.engine.adjust_stat("hap", 20); self.engine.adjust_stat("karma", 10, max_val=100); 
-        self.engine.log("Returned wallet (Karma +10).", SPRITES['Happy'])
-    
-    def menu(self, m): 
-        self.manager.current = m
+        self.engine.money += 500
+        self.engine.adjust_stat("karma", -5)
+        self.engine.log("Kept the wallet and its contents.", SPRITES['Money'])
 
-# --- GENERIC MENU SCREEN ---
+    def scen_ret(self): 
+        self.engine.adjust_stat("karma", 10)
+        self.engine.adjust_stat("hap", 5)
+        self.engine.log("Returned the wallet to its owner.", SPRITES['Karma'])
+
+    def scen_accept_job(self, job_data):
+        self.engine.career = next(name for name, data in JOBS.items() if data == job_data) # Find job name by its data
+        self.engine.log(f"Accepted the job as a {self.engine.career}!", SPRITES['Job'])
+        self.update()
+
+    def scen_decline_job(self):
+        self.engine.log("Declined the job offer.", SPRITES['Sad'])
+        self.update()
+
+    def menu(self, m): self.manager.current = m
+
 class MenuScreen(Screen):
-    def __init__(self, name, **kwargs):
-        super().__init__(name=name, **kwargs)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.app = MDApp.get_running_app()
-        self.engine = self.app.engine
-        self.dialog = None # Initialize dialog state for MenuScreen as well
+        self.dialog = None
 
     def on_enter(self):
-        self.engine = self.app.engine # Ensure engine is updated on screen entry
+        self.engine = self.app.engine
         self.build_ui()
     
-    def back(self, *x): 
-        self.manager.current = 'game'
+    def back(self, *x): self.manager.current = 'game'
 
     def build_ui(self):
         self.clear_widgets()
         layout = MDBoxLayout(orientation='vertical', padding=dp(15), spacing=dp(10))
         layout.add_widget(MDLabel(text=self.name.upper(), font_style="H5", halign="center", size_hint_y=0.1))
         
-        scroll = MDScrollView()
-        
         self.menu_rv = RecycleView(viewclass=SelectableTwoLineIconListItem)
         self.menu_rv_layout = RecycleBoxLayout(default_size=(None, dp(64)), default_size_hint=(1, None),
                                         orientation='vertical', size_hint_y=None, spacing=dp(2))
+        self.menu_rv_layout.bind(minimum_height=self.menu_rv_layout.setter('height'))
         self.menu_rv.add_widget(self.menu_rv_layout)
-        scroll.add_widget(self.menu_rv)
+        layout.add_widget(self.menu_rv)
         
-        items_data = [] # List to hold dictionaries for RecycleView data
-
-        # DYNAMIC CONTENT BUILDER
+        items_data = [] 
         if self.name == "job":
-            if self.engine.age < 16: items_data.append({'text': "Child Labor Laws Active.", 'disabled': True, 'icon': SPRITES['Sad']})
-            elif self.engine.current_education: items_data.append({'text': "Cannot take a job while studying full-time.", 'disabled': True, 'icon': SPRITES['School']})
-            else:
-                if self.engine.career != "Unemployed":
-                    items_data.append({'text': f"Current: {self.engine.career}", 'secondary_text': "Click to Quit", 'icon': JOBS[self.engine.career]['icon'], 'callback': self.quit_job})
-                    items_data.append({'text': "--- Available Jobs ---", 'disabled': True})
+            if self.engine.career != "Unemployed":
+                items_data.append({'text': f"Current: {self.engine.career}", 'secondary_text': f"Salary: ${JOBS[self.engine.career]['sal']:,}. Click to Quit.", 'icon': JOBS[self.engine.career]['icon'], 'callback': self.quit_job})
+            items_data.append({'text': "--- Available Jobs ---", 'secondary_text': "", 'disabled': True})
+            for t, d in JOBS.items():
+                if t == self.engine.career: continue # Don't list current job again
+                req_skills_str = ", ".join([f"{s} ({lvl})" for s, lvl in d['req_skills'].items()])
+                if req_skills_str: req_skills_str = f"| Skills: {req_skills_str}"
                 
-                for t, d in JOBS.items():
-                    can_apply = self.engine.age >= d['req_age'] and self.engine.smrt >= d['req_smrt']
-                    for skill, level in d['req_skills'].items():
-                        if self.engine.get_skill_level(skill) < level: can_apply = False
-                    
-                    sec_text = f"Salary: ${d['sal']:,}/yr | Age: {d['req_age']} | Smrt: {d['req_smrt']}"
-                    if d['req_skills']:
-                        req_skills_str = ", ".join([f"{s} Lv.{l}" for s, l in d['req_skills'].items()])
-                        sec_text += f" | Skills: {req_skills_str}"
+                can_apply = self.engine.age >= d['req_age'] and self.engine.smrt >= d['req_smrt']
+                
+                # Check for required degree if applicable
+                req_degree = d.get('req_degree')
+                if req_degree and self.engine.education != req_degree:
+                    can_apply = False
+                    req_skills_str += f" | Req: {req_degree}"
 
-                    items_data.append({
-                        'text': t,
-                        'secondary_text': sec_text,
-                        'icon': d['icon'],
-                        'callback': (lambda t=t: self.get_job(t)) if can_apply else None,
-                        'disabled': not can_apply
-                    })
+                secondary_text = f"${d['sal']:,} | Age: {d['req_age']} | Smrt: {d['req_smrt']}% {req_skills_str}"
+                items_data.append({'text': t, 'secondary_text': secondary_text, 'icon': d['icon'], 'callback': (lambda t=t: self.get_job(t)) if can_apply else None, 'disabled': not can_apply})
         
         elif self.name == "asset":
-            if self.engine.age < 18: items_data.append({'text': "Must be 18+ to buy assets.", 'disabled': True, 'icon': SPRITES['Sad']})
-            else:
-                items_data.append({'text': "--- Your Assets ---", 'disabled': True})
-                if not self.engine.assets: items_data.append({'text': "No assets owned.", 'disabled': True})
+            if self.engine.assets:
+                items_data.append({'text': "--- Your Assets ---", 'secondary_text': "", 'disabled': True})
                 for i, a in enumerate(self.engine.assets):
-                    asset_info = f"{a['name']} (Value: ${a['val']:,})"
-                    upkeep_cost = a['props'].get('upkeep', 0)
-                    if upkeep_cost > 0: asset_info += f" | Upkeep: ${upkeep_cost:,}/yr"
-                    items_data.append({
-                        'text': asset_info,
-                        'secondary_text': "Click to Sell",
-                        'icon': SPRITES[a['type']],
-                        'callback': lambda idx=i: self.sell_asset_dialog(idx)
-                    })
-                
-                items_data.append({'text': "--- Available to Buy ---", 'disabled': True})
-                for n, p, t, props in ASSETS:
-                    can_buy = self.engine.money >= p
-                    items_data.append({
-                        'text': n,
-                        'secondary_text': f"Cost: ${p:,} | Upkeep: ${props.get('upkeep', 0):,}/yr",
-                        'icon': SPRITES[t],
-                        'callback': (lambda n=n,p=p,t=t,props=props:self.buy_asset(n,p,t,props)) if can_buy else None,
-                        'disabled': not can_buy
-                    })
+                    items_data.append({'text': f"{a['name']} (${a['val']:,})", 'secondary_text': "Click to Sell", 'icon': SPRITES[a['type']], 'callback': lambda idx=i: self.sell_asset(idx)})
+            items_data.append({'text': "--- Buy New Assets ---", 'secondary_text': "", 'disabled': True})
+            for n, p, t, props in ASSETS:
+                can_buy = self.engine.money >= p
+                secondary_text = f"${p:,}"
+                if t == 'House': secondary_text += f" | Upkeep: ${props.get('upkeep',0):,} | Apprec: {props.get('appreciation',0)*100:.0f}%"
+                elif t == 'Car': secondary_text += f" | Upkeep: ${props.get('upkeep',0):,} | Deprec: {props.get('depreciation',0)*100:.0f}%"
+                elif t in ['Stocks', 'Crypto']: secondary_text += f" | Volatility: {props.get('volatility',0)*100:.0f}%"
+
+                items_data.append({'text': n, 'secondary_text': secondary_text, 'icon': SPRITES[t], 'callback': (lambda n=n,p=p,t=t,props=props:self.buy_asset(n,p,t,props)) if can_buy else None, 'disabled': not can_buy})
         
         elif self.name == "act":
-            items_data.append({'text': "--- Health & Mind ---", 'disabled': True})
-            opts = [("🏥 Visit Doctor", self.doc, SPRITES['Doc'], 100), ("🏋️ Go to Gym", self.gym, SPRITES['Gym'], 50), ("🧘 Meditate", self.meditate, SPRITES['Meditate'], 0), ("🧠 Study", self.study, SPRITES['Study'], 200)]
-            for t, f, icon, cost in opts:
-                can_afford = self.engine.money >= cost
-                items_data.append({
-                    'text': t,
-                    'secondary_text': f"(Cost: ${cost:,})" if cost > 0 else "(Free)",
-                    'icon': icon,
-                    'callback': f if can_afford else None,
-                    'disabled': not can_afford
-                })
-            
-            items_data.append({'text': "--- Education ---", 'disabled': True})
-            for program_name, data in EDUCATION_PROGRAMS.items():
-                if program_name == self.engine.education:
-                     items_data.append({'text': f"Completed: {program_name}", 'icon': SPRITES['Degree'], 'disabled': True})
-                     continue
-                if self.engine.current_education and self.engine.current_education['degree'] == data.get('degree'):
-                    items_data.append({'text': f"Enrolled: {program_name} ({self.engine.education_years_left} yrs left)", 'icon': SPRITES['Degree'], 'disabled': True})
-                    continue
+            items_data.append({'text': "--- General Actions ---", 'secondary_text': "", 'disabled': True})
+            opts = [
+                ("Go to Doctor", self.doc, SPRITES['Doc'], "$100 - Boosts Health (+20 Hlt)", 100, "money"),
+                ("Go to Gym", self.gym, SPRITES['Gym'], "$50 - Boosts Health & Looks (+5 Hlt, +5 Look)", 50, "money"),
+                ("Study (Smarts)", self.study, SPRITES['Study'], "Boosts Smarts (+5 Smrt)", 0, None),
+                ("Meditate (Stress)", self.meditate, SPRITES['Meditate'], "Reduces Stress (-10 Stress)", 0, None),
+                ("Volunteer (Karma)", self.volunteer, SPRITES['Volunteer'], "Boosts Karma (+5 Karma)", 0, None),
+                ("Attempt Crime", self.crime, SPRITES['Crime'], "High Risk - Money or Jail!", 0, None),
+                ("Find Life Orb", self.discover_orb_action, SPRITES['LifeOrb'], "Discover a hidden Life Orb location.", 0, None)
+            ]
+            for t, f, icon, desc, cost, cost_type in opts:
+                can_afford = True
+                if cost_type == "money" and self.engine.money < cost: can_afford = False
+                items_data.append({'text': t, 'secondary_text': desc, 'icon': icon, 'callback': f if can_afford else None, 'disabled': not can_afford})
 
-                can_enroll = self.engine.age >= data['min_age'] and self.engine.money >= data['cost']
-                if data.get('req_smrt', 0) > self.engine.smrt: can_enroll = False
+            items_data.append({'text': "--- Education ---", 'secondary_text': "", 'disabled': True})
+            if self.engine.current_education:
+                items_data.append({'text': f"Currently studying: {self.engine.current_education['degree']}", 'secondary_text': f"{self.engine.education_years_left} years left. Cost: ${self.engine.current_education['cost']/self.engine.current_education['duration']:.0f}/year.", 'icon': SPRITES['Study'], 'disabled': True})
+                items_data.append({'text': "Drop Out", 'secondary_text': "End current education program early.", 'icon': SPRITES['Layoff'], 'callback': self.drop_out_education})
+            else:
+                for t, d in EDUCATION_PROGRAMS.items():
+                    can_enroll = self.engine.age >= d['min_age'] and self.engine.money >= d['cost']
+                    if d.get('req_smrt') and self.engine.smrt < d['req_smrt']: can_enroll = False
+                    if d.get('req_degree') and self.engine.education != d['req_degree']: can_enroll = False
 
-                sec_text = f"Cost: ${data['cost']:,} | Duration: {data['duration']} yrs"
-                if data.get('req_smrt', 0) > self.engine.smrt: sec_text += f" (Req. Smrt: {data['req_smrt']})"
-                
-                items_data.append({
-                    'text': program_name,
-                    'secondary_text': sec_text,
-                    'icon': SPRITES['School'],
-                    'callback': (lambda p=program_name, d=data: self.enroll_education(p, d)) if can_enroll else None,
-                    'disabled': not can_enroll
-                })
-
-            items_data.append({'text': "--- Social & Entertainment ---", 'disabled': True})
-            opts = [("🎰 Go to Casino", self.casino, SPRITES['Casino'], 100), ("✈️ Travel", self.travel, SPRITES['Travel'], 1000), ("🧑‍🤝‍🧑 Volunteer", self.volunteer, SPRITES['Volunteer'], 0), ("❤️ Dating App", self.date, SPRITES['Love'], 0)]
-            for t, f, icon, cost in opts:
-                can_afford = self.engine.money >= cost
-                items_data.append({
-                    'text': t,
-                    'secondary_text': f"(Cost: ${cost:,})" if cost > 0 else "(Free)",
-                    'icon': icon,
-                    'callback': f if can_afford else None,
-                    'disabled': not can_afford
-                })
-
-            items_data.append({'text': "--- Illegal ---", 'disabled': True})
-            opts = [("🔫 Commit Crime", self.crime, SPRITES['Crime'], 0)]
-            for t, f, icon, cost in opts:
-                can_afford = self.engine.money >= cost # Crime doesn't usually cost money directly
-                items_data.append({
-                    'text': t,
-                    'secondary_text': "(High Risk!)",
-                    'icon': icon,
-                    'callback': f if can_afford else None,
-                    'disabled': not can_afford
-                })
-            
-        elif self.name == "rel":
-            items_data.append({'text': "--- Family & Friends ---", 'disabled': True})
-            for r in self.engine.relations:
-                action_text = ""
-                if r['type'] == 'Spouse': action_text = " (Married)"
-                elif r['type'] == 'Partner': action_text = " (Partner)"
+                    secondary_text = f"Cost: ${d['cost']:,} | Duration: {d['duration']} yrs | Smarts gain: {d['smrt_gain']}"
+                    if d.get('req_smrt'): secondary_text += f" | Req Smarts: {d['req_smrt']}%"
+                    if d.get('req_degree'): secondary_text += f" | Req Degree: {d['req_degree']}"
                     
-                items_data.append({
-                    'text': f"{r['name']} ({r['type']})",
-                    'secondary_text': f"Relationship: {r['rel']}% {action_text}",
-                    'icon': SPRITES['Love'],
-                    'callback': lambda rel_obj=r: self.interact_relation(rel_obj)
-                })
-            
-            if self.engine.married_to:
-                items_data.append({
-                    'text': "HAVE A CHILD",
-                    'secondary_text': "Expand your family!",
-                    'icon': SPRITES['Baby'],
-                    'callback': self.have_child
-                })
-            
-            items_data.append({'text': "--- Your Children ---", 'disabled': True})
-            if not self.engine.children: items_data.append({'text': "No children yet.", 'disabled': True})
-            for child in self.engine.children:
-                items_data.append({'text': f"{child['name']} (Age: {child['age']})", 'icon': SPRITES['Child'], 'disabled': True})
+                    items_data.append({'text': t, 'secondary_text': secondary_text, 'icon': SPRITES['School'], 'callback': (lambda t=t: self.enroll_education(t)) if can_enroll else None, 'disabled': not can_enroll})
 
-            items_data.append({'text': "--- Your Skills ---", 'disabled': True})
-            if not self.engine.skills: items_data.append({'text': "No skills acquired yet.", 'disabled': True})
-            for skill, level in self.engine.skills.items():
-                items_data.append({'text': f"{skill} (Level: {level})", 'icon': SPRITES['Skill'], 'disabled': True})
+            items_data.append({'text': "--- Inventory (Life Orbs) ---", 'secondary_text': "", 'disabled': True})
+            if not self.engine.inventory:
+                items_data.append({'text': "No items in inventory.", 'secondary_text': "", 'disabled': True})
+            else:
+                for orb_type, count in self.engine.inventory.items():
+                    if count > 0:
+                        orb_data = LIFE_ORBS[orb_type]
+                        items_data.append({'text': f"{orb_type} (x{count})", 'secondary_text': orb_data['description'], 'icon': orb_data['icon'], 'callback': (lambda ot=orb_type: self.use_orb_action(ot))})
+
+
+        elif self.name == "rel":
+            items_data.append({'text': "--- Your Family & Friends ---", 'secondary_text': "", 'disabled': True})
+            if self.engine.married_to: 
+                items_data.append({'text': f"{self.engine.married_to} (Spouse)", 'secondary_text': f"Relationship: {next(r['rel'] for r in self.engine.relations if r['name'] == self.engine.married_to)}%", 'icon': SPRITES['Love'], 'callback': (lambda r_name=self.engine.married_to: self.interact_rel({"name": r_name, "type": "Spouse"}))})
+                items_data.append({'text': "Have a Child", 'secondary_text': "Start a family!", 'icon': SPRITES['Baby'], 'callback': self.have_child, 'disabled': self.engine.age < 18 or self.engine.age > 45})
             
-            items_data.append({'text': "--- Learn New Skills ---", 'disabled': True})
-            for skill_name, data in SKILLS_LEARN.items():
-                current_level = self.engine.get_skill_level(skill_name)
-                req_smrt = data.get('smrt_req', 0)
-                can_learn = self.engine.money >= data['cost'] and self.engine.smrt >= req_smrt
-                
-                sec_text = f"Cost: ${data['cost']:,} | Smrt Req: {req_smrt} | Current Lv: {current_level}"
-                items_data.append({
-                    'text': f"Learn {skill_name}",
-                    'secondary_text': sec_text,
-                    'icon': SPRITES['Skill'],
-                    'callback': (lambda s_name=skill_name, s_data=data: self.learn_skill(s_name, s_data)) if can_learn else None,
-                    'disabled': not can_learn
-                })
-        
+            for r in self.engine.relations:
+                if r['name'] == self.engine.married_to: continue # Already listed spouse
+                if r['type'] == 'Partner': # Special action for potential partner
+                    items_data.append({'text': f"{r['name']} (Partner)", 'secondary_text': f"Relationship: {r['rel']}% | Ask to marry?", 'icon': SPRITES['Love'], 'callback': (lambda r=r: self.propose_marriage(r))})
+                else:
+                    items_data.append({'text': f"{r['name']} ({r['type']})", 'secondary_text': f"Relationship: {r['rel']}% | Interact", 'icon': SPRITES['Love'], 'callback': lambda r=r: self.interact_rel(r)})
+            
+            if self.engine.children:
+                items_data.append({'text': "--- Your Children ---", 'secondary_text': "", 'disabled': True})
+                for child in self.engine.children:
+                    items_data.append({'text': f"{child['name']} (Age: {child['age']})", 'secondary_text': "Show affection", 'icon': SPRITES['Child'], 'callback': lambda c=child: self.interact_child(c)})
+
+
         self.menu_rv.data = items_data
-        layout.add_widget(scroll)
         layout.add_widget(MDFillRoundFlatButton(text="BACK", size_hint_y=0.08, on_release=self.back))
         self.add_widget(layout)
 
-    # ACTIONS
-    def get_job(self, job_name):
-        job_data = JOBS[job_name]
-        if self.engine.age >= job_data['req_age'] and self.engine.smrt >= job_data['req_smrt']:
-            can_apply = True
-            for skill, level in job_data['req_skills'].items():
-                if self.engine.get_skill_level(skill) < level:
-                    can_apply = False
-                    break
-            if can_apply:
-                self.engine.career = job_name
-                self.engine.log(f"HIRED as {job_name}!", job_data['icon'])
-                self.engine.adjust_stat("hap", 15); self.engine.adjust_stat("stress", -10)
-            else:
-                self.engine.log(f"Rejected from {job_name} (Skill req).", SPRITES['Sad'])
-                self.engine.adjust_stat("hap", -5)
-        else:
-            self.engine.log(f"Rejected from {job_name} (Age/Smrt req).", SPRITES['Sad'])
-            self.engine.adjust_stat("hap", -5)
+    # Job Actions
+    def get_job(self, job_name): 
+        self.engine.career = job_name
+        self.engine.log(f"Hired as {job_name}!", SPRITES['Job'])
         self.back()
-    
-    def quit_job(self, *x):
-        self.engine.log(f"Quit job as {self.engine.career}.", "🚶")
+
+    def quit_job(self): 
         self.engine.career = "Unemployed"
-        self.engine.adjust_stat("hap", -10); self.engine.adjust_stat("stress", -15)
-        self.back()
-
-    def buy_asset(self, n, p, t, props):
-        if self.engine.money >= p: 
-            self.engine.money -= p
-            self.engine.assets.append({"name": n, "val": p, "type": t, "props": props})
-            self.engine.log(f"Bought {n}!", SPRITES[t])
-            self.engine.adjust_stat("hap", 10)
-            self.engine.buzz(0.1)
-        else: 
-            self.engine.log("Insufficient funds.", SPRITES['Sad'])
-            self.engine.buzz(0.2)
-        self.back()
-
-    def sell_asset_dialog(self, idx):
-        asset = self.engine.assets[idx]
-        def sell_confirmed(*args):
-            self.sell_asset(idx)
-            if self.dialog: # Ensure dialog exists before dismissing
-                self.dialog.dismiss()
-                self.dialog = None
-        
-        self.dialog = MDDialog(
-            title="Sell Asset?",
-            text=f"Are you sure you want to sell your {asset['name']} for ${asset['val']:,}?",
-            buttons=[
-                MDRectangleFlatButton(text="CANCEL", on_release=lambda x: (self.dialog.dismiss(), setattr(self, 'dialog', None))),
-                MDFillRoundFlatButton(text="SELL", md_bg_color=(0.8,0,0,1), on_release=sell_confirmed)
-            ]
-        )
-        self.dialog.open()
-
-    def sell_asset(self, idx):
-        asset = self.engine.assets.pop(idx)
-        self.engine.money += asset['val']
-        self.engine.log(f"Sold {asset['name']} for ${asset['val']:,}.", SPRITES['Money'])
-        self.engine.adjust_stat("hap", 5)
-        self.back()
-
-    def doc(self, *x): 
-        if self.engine.money>=100:
-            self.engine.money-=100; self.engine.adjust_stat("hlt", 100-self.engine.hlt + 10); # Heal to 100 + a bit extra if already low
-            self.engine.adjust_stat("stress", -20)
-            self.engine.log("Visited Doctor. Feeling much better!", SPRITES['Doc'])
-            self.engine.buzz(0.05)
-        else: self.engine.log("Need $100 for doctor's visit.", SPRITES['Sad'])
+        self.engine.log("Quit job.", SPRITES['Layoff'])
         self.back()
     
-    def gym(self, *x):
-        if self.engine.money>=50:
-            self.engine.money-=50
-            self.engine.adjust_stat("hlt", random.randint(5, 15))
-            self.engine.adjust_stat("energy", -random.randint(10, 20))
-            self.engine.adjust_stat("stress", -5)
-            self.engine.log("Worked out at the gym. Feeling stronger!", SPRITES['Gym'])
-            self.engine.buzz(0.05)
-        else: self.engine.log("Need $50 for the gym.", SPRITES['Sad'])
+    # Asset Actions
+    def buy_asset(self, n, p, t, props): 
+        self.engine.money -= p
+        self.engine.assets.append({"name": n, "val": p, "type": t, "props": props})
+        self.engine.log(f"Bought {n}!", SPRITES['Money'])
         self.back()
 
-    def meditate(self, *x):
-        self.engine.adjust_stat("stress", -random.randint(10, 25))
-        self.engine.adjust_stat("hap", random.randint(5, 10))
-        self.engine.adjust_stat("energy", random.randint(5, 10))
-        self.engine.log("Meditated. Feeling calm and refreshed.", SPRITES['Meditate'])
-        self.engine.buzz(0.05)
-        self.back()
-
-    def study(self, *x):
-        if self.engine.money >= 200:
-            self.engine.money -= 200
-            self.engine.adjust_stat("smrt", random.randint(3, 8))
-            self.engine.adjust_stat("stress", 5)
-            self.engine.adjust_stat("energy", -random.randint(5, 10))
-            self.engine.log("Studied hard. Brain power increased!", SPRITES['Study'])
-            self.engine.buzz(0.05)
-        else:
-            self.engine.log("Need $200 for study materials.", SPRITES['Sad'])
-        self.back()
-
-    def enroll_education(self, program_name, data):
-        if self.engine.money >= data['cost']:
-            # For simplicity, full cost is deducted initially, yearly deduction will then occur
-            self.engine.money -= data['cost'] 
-            self.engine.current_education = data
-            self.engine.education_years_left = data['duration']
-            self.engine.log(f"Enrolled in {program_name}! Costs spread over {data['duration']} years.", SPRITES['Degree'])
-            self.engine.buzz(0.1)
-        else:
-            self.engine.log(f"Insufficient funds to enroll in {program_name}.", SPRITES['Sad'])
-            self.engine.buzz(0.2)
+    def sell_asset(self, idx): 
+        a = self.engine.assets.pop(idx)
+        self.engine.money += a['val']
+        self.engine.log(f"Sold {a['name']} for ${a['val']:,}.", SPRITES['Money'])
         self.back()
     
-    def learn_skill(self, skill_name, data):
-        if self.engine.money >= data['cost'] and self.engine.smrt >= data['smrt_req']:
-            self.engine.money -= data['cost']
-            self.engine.skills[skill_name] = self.engine.skills.get(skill_name, 0) + data['effect'].get("skill_level", 1)
-            self.engine.adjust_stat("smrt", data['effect'].get("smrt", 0))
-            self.engine.adjust_stat("hap", data['effect'].get("hap", 0))
-            self.engine.adjust_stat("hlt", data['effect'].get("hlt", 0))
-            self.engine.adjust_stat("fame", data['effect'].get("fame", 0), allow_below_min=True)
-            self.engine.log(f"Improved {skill_name} skill to Level {self.engine.skills[skill_name]}!", SPRITES['Skill'])
-            self.engine.buzz(0.08)
-        else:
-            self.engine.log(f"Cannot learn {skill_name}. Check funds or smartness.", SPRITES['Sad'])
-            self.engine.buzz(0.2)
+    # General Actions
+    def doc(self): 
+        self.engine.money -= 100
+        self.engine.adjust_stat("hlt", 20)
+        self.engine.adjust_stat("stress", -5)
+        self.engine.log("Visited Doctor. Feeling better!", SPRITES['Doc'])
         self.back()
 
-    def crime(self, *x):
-        self.engine.adjust_stat("energy", -random.randint(10, 20))
-        if random.random() > 0.6: # 40% chance of success
-            loot = random.randint(500, 5000)
-            self.engine.money += loot
-            self.engine.adjust_stat("karma", -random.randint(5, 15), min_val=-100, allow_below_min=True)
-            self.engine.adjust_stat("hap", 5)
-            self.engine.log(f"Successfully committed crime, gained ${loot:,}!", SPRITES['Money'])
-            self.engine.buzz(0.1)
-        else: 
-            jail_time = random.randint(2, 5)
-            self.engine.jail = jail_time
-            self.engine.adjust_stat("karma", -random.randint(10, 25), min_val=-100, allow_below_min=True)
-            self.engine.adjust_stat("hap", -20)
-            self.engine.adjust_stat("fame", -10, min_val=-100, allow_below_min=True)
-            self.engine.log(f"ARRESTED! Serving {jail_time} years.", SPRITES['Jail'])
-            self.engine.buzz(0.5) # Longer vibration for negative event
+    def gym(self): 
+        self.engine.money -= 50
+        self.engine.adjust_stat("hlt", 5)
+        self.engine.adjust_stat("look", 5)
+        self.engine.adjust_stat("energy", -10)
+        self.engine.log("Had a good workout at the gym.", SPRITES['Gym'])
         self.back()
     
-    def casino(self, *x):
-        if self.engine.money >= 100:
-            self.engine.money -= 100
-            self.engine.adjust_stat("energy", -5)
-            if random.random() > 0.55: # 45% chance to win
-                winnings = random.randint(150, 500)
-                self.engine.money += winnings
-                self.engine.adjust_stat("hap", 10)
-                self.engine.log(f"Won ${winnings:,} at the casino!", SPRITES['Casino'])
-            else:
-                self.engine.adjust_stat("hap", -5)
-                self.engine.log("Lost $100 at the casino.", "💸")
-            self.engine.buzz(0.05)
-        else: self.engine.log("Need $100 to gamble.", SPRITES['Sad'])
+    def study(self):
+        self.engine.adjust_stat("smrt", 5)
+        self.engine.adjust_stat("energy", -5)
+        self.engine.adjust_stat("stress", 3)
+        self.engine.log("Spent time studying.", SPRITES['Study'])
         self.back()
 
-    def travel(self, *x):
-        if self.engine.money >= 1000:
-            self.engine.money -= 1000
-            self.engine.adjust_stat("hap", 20)
-            self.engine.adjust_stat("stress", -20)
-            self.engine.adjust_stat("fame", random.randint(0, 5), allow_below_min=True)
-            self.engine.log("Traveled to an exotic location! Feeling rejuvenated.", SPRITES['Travel'])
-            self.engine.buzz(0.08)
-        else: self.engine.log("Need $1000 to travel.", SPRITES['Sad'])
-        self.back()
-    
-    def volunteer(self, *x):
-        self.engine.adjust_stat("hap", 15)
-        self.engine.adjust_stat("karma", 10, max_val=100)
+    def meditate(self):
         self.engine.adjust_stat("stress", -10)
-        self.engine.log("Volunteered for a good cause! Boosted karma.", SPRITES['Volunteer'])
-        self.engine.buzz(0.05)
+        self.engine.adjust_stat("hap", 5)
+        self.engine.adjust_stat("energy", 5)
+        self.engine.log("Meditated for a while. Feeling peaceful.", SPRITES['Meditate'])
         self.back()
 
-    def date(self, *x):
+    def volunteer(self):
+        self.engine.adjust_stat("karma", 5)
+        self.engine.adjust_stat("hap", 10)
+        self.engine.adjust_stat("energy", -5)
+        self.engine.log("Volunteered for a good cause.", SPRITES['Volunteer'])
+        self.back()
+
+    def crime(self):
+        self.engine.adjust_stat("karma", -random.randint(5, 15))
+        self.engine.adjust_stat("stress", random.randint(10, 20))
+        if random.random() > 0.6: # 40% chance of success
+            profit = random.randint(500, 5000)
+            self.engine.money += profit
+            self.engine.log(f"Successfully committed a crime and gained ${profit:,}!", SPRITES['Crime'])
+        else: # 60% chance of failure/arrest
+            jail_time = random.randint(1, 5)
+            self.engine.jail = jail_time
+            self.engine.log(f"Caught! Sentenced to {jail_time} years in jail.", SPRITES['Jail'])
+        self.back()
+
+    def discover_orb_action(self):
+        self.engine.discover_life_orb()
+        self.back()
+
+    def use_orb_action(self, orb_type):
+        self.engine.use_life_orb(orb_type)
+        self.back()
+
+    # Education Actions
+    def enroll_education(self, program_name):
+        program_data = EDUCATION_PROGRAMS[program_name]
+        self.engine.current_education = program_data
+        self.engine.education_years_left = program_data['duration']
+        self.engine.money -= program_data['cost'] / program_data['duration'] # Pay first year upfront
+        self.engine.log(f"Enrolled in {program_name}.", SPRITES['School'])
+        self.back()
+    
+    def drop_out_education(self):
+        self.engine.current_education = None
+        self.engine.education_years_left = 0
+        self.engine.adjust_stat("smrt", -5) # Small penalty for dropping out
+        self.engine.log("Dropped out of education.", SPRITES['Sad'])
+        self.back()
+
+    # Relationship Actions
+    def propose_marriage(self, partner_data):
         if self.engine.age < 18:
-            self.engine.log("Too young to date.", SPRITES['Sad'])
-            self.back()
-            return
-
-        if self.engine.married_to:
-            self.engine.log("Already married! Consider other relationship actions.", SPRITES['Love'])
-            self.back()
-            return
-
-        n = random.choice(["Ashley","Jessica","Mike","Chris"])
-        rel_exists = False
-        for r in self.engine.relations:
-            if r['name'] == n and r['type'] == 'Partner':
-                self.engine.log(f"Already dating {n}!", SPRITES['Love'])
-                rel_exists = True
-                break
-        if not rel_exists:
-            self.engine.relations.append({"name": n, "rel": 50, "type": "Partner"})
-            self.engine.log(f"Started dating {n}!", SPRITES['Love'])
-            self.engine.adjust_stat("hap", 10)
-        self.back()
-
-    def interact_relation(self, rel_obj):
-        def offer_marriage_confirmed(*args):
-            if self.dialog: # Ensure dialog exists before dismissing
-                self.dialog.dismiss()
-                self.dialog = None
-            if self.engine.married_to:
-                self.engine.log(f"You are already married to {self.engine.married_to}.", SPRITES['Sad'])
-                self.back()
-                return
-            if random.random() < rel_obj['rel'] / 100.0 * 0.8: # Higher chance with better relationship
-                self.engine.married_to = rel_obj['name']
-                rel_obj['type'] = 'Spouse' # Update type in relations list
-                self.engine.log(f"You married {rel_obj['name']}! Congratulations!", SPRITES['Marriage'])
-                self.engine.adjust_stat("hap", 30); self.engine.adjust_stat("fame", 10, allow_below_min=True)
-            else:
-                self.engine.log(f"{rel_obj['name']} rejected your proposal. Relationship declined.", SPRITES['Sad'])
-                rel_obj['rel'] = max(0, rel_obj['rel'] - 20)
-                self.engine.adjust_stat("hap", -15); self.engine.adjust_stat("stress", 10)
-            self.back()
-
-        def try_improve_relationship_confirmed(*args):
-            if self.dialog: # Ensure dialog exists before dismissing
-                self.dialog.dismiss()
-                self.dialog = None
-            cost = random.randint(50, 200)
-            if self.engine.money >= cost:
-                self.engine.money -= cost
-                gain = random.randint(5, 20) * (1 if self.engine.look > 50 else 0.5)
-                rel_obj['rel'] = min(100, rel_obj['rel'] + gain)
-                self.engine.log(f"Improved relationship with {rel_obj['name']} by {int(gain)}%. Spent ${cost}.", SPRITES['Love'])
-                self.engine.adjust_stat("hap", 5)
-            else:
-                self.engine.log(f"Couldn't afford to interact with {rel_obj['name']}. Need ${cost}.", SPRITES['Sad'])
-            self.back()
-
-        buttons = []
-        if rel_obj['type'] == 'Partner' and not self.engine.married_to:
-            buttons.append(MDRectangleFlatButton(text="Propose Marriage", on_release=offer_marriage_confirmed))
-        
-        buttons.append(MDRectangleFlatButton(text="Improve Relationship", on_release=try_improve_relationship_confirmed))
-        buttons.append(MDRectangleFlatButton(text="Back", on_release=lambda x: (self.dialog.dismiss(), setattr(self, 'dialog', None))))
-
-        self.dialog = MDDialog(
-            title=f"Interact with {rel_obj['name']}",
-            text=f"Relationship: {rel_obj['rel']}%",
-            buttons=buttons
-        )
-        self.dialog.open()
-
-    def have_child(self, *x):
-        if not self.engine.married_to:
-            self.engine.log("Must be married to have a child.", SPRITES['Sad'])
-            self.back()
+            self.engine.log("Too young to get married!", SPRITES['Sad'])
             return
         
-        if random.random() < 0.7: # 70% chance to conceive
-            child_name = random.choice(['Max','Leo','Zoe','Lily'])
-            self.engine.children.append({"name": child_name, "age": 0})
-            self.engine.log(f"Congratulations! You had a child named {child_name}!", SPRITES['Baby'])
-            self.engine.adjust_stat("hap", 25); self.engine.adjust_stat("stress", 15)
+        partner_rel = next(r['rel'] for r in self.engine.relations if r['name'] == partner_data['name'])
+        if partner_rel >= 70 and random.random() < (partner_rel / 100): # Higher relationship, higher chance
+            self.engine.married_to = partner_data['name']
+            for r in self.engine.relations:
+                if r['name'] == partner_data['name']:
+                    r['type'] = 'Spouse'
+                    break
+            self.engine.adjust_stat("hap", 20)
+            self.engine.adjust_stat("stress", -10)
+            self.engine.log(f"Married {partner_data['name']}! ❤️", SPRITES['Marriage'])
         else:
-            self.engine.log("Could not conceive a child this year.", SPRITES['Sad'])
-            self.engine.adjust_stat("hap", -5); self.engine.adjust_stat("stress", 5)
+            self.engine.adjust_stat("hap", -15)
+            self.engine.adjust_stat("stress", 10)
+            self.engine.log(f"Proposal rejected by {partner_data['name']} 💔. Relationship took a hit.", SPRITES['Sad'])
+            for r in self.engine.relations:
+                if r['name'] == partner_data['name']:
+                    r['rel'] = max(0, r['rel'] - 20)
+                    break
         self.back()
 
-# --- APP BOOTSTRAP ---
+    def have_child(self): 
+        if self.engine.married_to:
+            child_name = random.choice(['Mia', 'Zoe', 'Leo', 'Max', 'Sam', 'Ella'])
+            self.engine.children.append({"name": child_name, "age": 0})
+            self.engine.relations.append({"name": child_name, "rel": 100, "type": "Child"})
+            self.engine.adjust_stat("money", -1000, allow_below_min=True) # Initial cost of raising a child
+            self.engine.adjust_stat("hap", 15)
+            self.engine.adjust_stat("stress", 10)
+            self.engine.log(f"Had a baby named {child_name}!", SPRITES['Child'])
+        else:
+            self.engine.log("You need to be married to have a child!", SPRITES['Sad'])
+        self.back()
+
+    def interact_rel(self, r_data): 
+        # For general interaction with family/spouse
+        r = next(item for item in self.engine.relations if item['name'] == r_data['name'])
+        r['rel'] = min(100, r['rel'] + random.randint(5, 15))
+        self.engine.adjust_stat("hap", 5)
+        self.engine.adjust_stat("stress", -3)
+        self.engine.log(f"Spent time with {r_data['name']}. Relationship improved.", SPRITES['Love'])
+        self.back()
+
+    def interact_child(self, child_data):
+        child_rel = next(r for r in self.engine.relations if r['name'] == child_data['name'])
+        child_rel['rel'] = min(100, child_rel['rel'] + random.randint(10, 20))
+        self.engine.adjust_stat("hap", 5)
+        self.engine.log(f"Played with {child_data['name']}. Good times!", SPRITES['Child'])
+        self.back()
+
+
 class Year3000App(MDApp):
     def build(self):
         self.theme_cls.theme_style = "Dark"
         self.theme_cls.primary_palette = "DeepPurple"
-        self.engine = SimEngine() # Initialize engine
+        self.engine = SimEngine()
         sm = ScreenManager(transition=NoTransition())
-        sm.add_widget(CharacterCreationScreen(name='char_create')) # First screen
+        sm.add_widget(CharacterCreationScreen(name='char_create'))
         sm.add_widget(GameScreen(name='game'))
         for m in ['job', 'asset', 'act', 'rel']: sm.add_widget(MenuScreen(name=m))
         return sm
 
 if __name__ == "__main__":
-    try: Year3000App().run()
-    except Exception as e:
-        with open("crash.txt", "w") as f: f.write(traceback.format_exc())
+    Year3000App().run()
