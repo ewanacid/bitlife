@@ -1,15 +1,14 @@
 [app]
-title = BitLife Titan
-package.name = bitlifetitan
+title = BitLife Cosmic
+package.name = bitlifecosmic
 package.domain = org.nfg
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ttf
-version = 5.0
-# We force specific versions to ensure stability
+version = 8.0
 requirements = python3,kivy==2.2.0,kivymd,pillow,android
 orientation = portrait
 fullscreen = 0
-android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
+android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE
 android.api = 33
 android.minapi = 21
 android.archs = arm64-v8a
