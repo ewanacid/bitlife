@@ -15,17 +15,28 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # --- THE UPGRADE: CACHE MODULE ---
+      # Saves the Android SDK so we don't download it every time.
+      # Prevents [Errno 101] Network Errors.
+      - name: Cache Buildozer
+        uses: actions/cache@v3
+        with:
+          path: .buildozer
+          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            ${{ runner.os }}-buildozer-
+
       - name: Install Dependencies
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install -y build-essential git ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev libffi-dev libssl-dev libncurses5:i386 libstdc++6:i386 zlib1g:i386 autoconf automake libtool pkg-config unzip
 
-      # THE FIX: We explicitly ask for old Cython
       - name: Install Buildozer
         run: pip install buildozer "cython<3"
 
       - name: Build APK
+        # We use 'yes' to auto-accept licenses, but cache makes this safer
         run: |
           yes | buildozer android debug
 
