@@ -1,12 +1,12 @@
 [app]
-title = BitLife Elite
-package.name = bitlifeelite
+title = BitLife Phoenix
+package.name = bitlifegen3
 package.domain = org.nfg
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ttf
-version = 3.0
+version = 3.5
+# CRITICAL: kivymd and pillow are required for the UI to render
 requirements = python3,kivy==2.2.0,kivymd,pillow,android
-
 orientation = portrait
 fullscreen = 0
 android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE

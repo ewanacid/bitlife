@@ -1,0 +1,33 @@
+Children: Have kids, raise them, they age up.
+Career Paths: Doctor, Lawyer, Chef, with requirements.
+Job Interviews: Mini-game to get hired.
+Business Ownership: Start companies, manage profit/loss.
+Stock Market: Buy/Sell stocks that fluctuate.
+Real Estate: Buy houses, rent them out.
+Car Ownership: Buy cars, pay for maintenance.
+Crime Expansion: Bank Heist, Burglary, Grand Theft Auto.
+Prison System: Jail time, riots, escape attempts.
+Lawyer Hire: Pay to reduce sentence.
+Addictions: Alcohol/Gambling addictions affecting health.
+Rehab: Pay to cure addictions.
+University: Pay tuition, study for degrees.
+Student Loans: Debt system for college.
+Gambling: Casino minigames (Blackjack).
+Lottery: Buy tickets for huge jackpot chance.
+Friends: Make friends, they can betray you.
+School Bullying: Fight bullies or report them.
+Military Career: Enlist, go to war, get medals.
+Politics: Run for Mayor/President.
+Fame System: Become famous, deal with paparazzi.
+Social Media: Post updates, get followers.
+Plastic Surgery: Change looks for money.
+Gym: Work out to improve health/looks.
+Vacations: Travel to other countries.
+Immigration: Move to a new country permanently.
+Taxes: Pay annual income tax.
+Wills: Leave money to kids or charity.
+Inheritance: Get money when parents die.
+Ghosts: Rare paranormal events.
+Aliens: Rare abduction events.
+Time Travel: Restart life with current knowledge.
+God Mode: Cheat menu for testing.
