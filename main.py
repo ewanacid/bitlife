@@ -1,75 +1,84 @@
+import random
 from kivymd.app import MDApp
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.screenmanager import MDScreenManager
-from kivymd.uix.button import MDFillRoundFlatButton, MDRectangleFlatButton
-from kivymd.uix.label import MDLabel
 from kivymd.uix.boxlayout import MDBoxLayout
-from kivymd.uix.scrollview import MDScrollView
-from kivymd.uix.list import MDList, OneLineListItem, TwoLineListItem
+from kivymd.uix.gridlayout import MDGridLayout
+from kivymd.uix.button import MDFillRoundFlatButton, MDRectangleFlatButton, MDIconButton
+from kivymd.uix.label import MDLabel
 from kivymd.uix.card import MDCard
 from kivymd.uix.dialog import MDDialog
-import random
+from kivymd.uix.list import MDList, TwoLineListItem, OneLineAvatarIconListItem, IconLeftWidget
+from kivymd.uix.scrollview import MDScrollView
+from kivymd.uix.bottomnavigation import MDBottomNavigation, MDBottomNavigationItem
 
-# --- GAME ENGINE ---
+# --- CORE LOGIC ENGINE ---
 class LifeEngine:
     def __init__(self):
+        self.reset()
+
+    def reset(self):
         self.age = 0
         self.money = 0
         self.happiness = 100
         self.health = 100
-        self.job = "Unemployed"
-        self.salary = 0
-        self.assets = []
+        self.smarts = random.randint(30, 90)
+        self.looks = random.randint(30, 90)
         self.alive = True
+        self.job = None # {title, salary, years}
+        self.education = "None"
+        self.criminal_record = False
+        self.jail_years = 0
+        self.assets = []
+        self.relationships = [] # {name, relation, stats}
+        self.log = ["You were born into a chaotic world."]
+
+    def add_log(self, text):
+        self.log.insert(0, f"Age {self.age}: {text}")
 
     def age_up(self):
+        if not self.alive: return
         self.age += 1
-        self.money += self.salary
         
-        # Age-based events
-        event = ""
-        if self.age < 5:
-            event = random.choice(["Learned to walk.", "Said first word.", "Cried all night.", "Ate dirt."])
-        elif self.age < 18:
-            event = random.choice(["Got an A in math.", "Bullied at school.", "First kiss!", "Skipped class."])
-        elif self.age > 60:
-            self.health -= random.randint(5, 15)
-            event = random.choice(["Back pain started.", "Retired from bingo.", "Forgot where keys are.", "Grandkids visited."])
-        else:
-            # Adult events
-            if self.job == "Unemployed":
-                event = random.choice(["Looked for work.", "Watched TV all day.", "Went to the park."])
-            else:
-                event = random.choice([f"Worked hard as a {self.job}.", "Boss yelled at you.", "Got a small raise!", "Boring day at work."])
+        # 1. JAIL CHECK
+        if self.jail_years > 0:
+            self.jail_years -= 1
+            self.happiness -= 10
+            self.add_log(f"Stuck in prison. {self.jail_years} years left.")
+            if self.jail_years == 0:
+                self.add_log("RELEASED FROM PRISON!")
+            return
 
-        # Random Chaos
-        if random.random() < 0.1:
-            chaos = random.choice([("Won the lottery!", 5000), ("Got robbed!", -500), ("Found $20", 20)])
-            event += f" AND {chaos[0]}"
-            self.money += chaos[1]
-
-        return event
-
-# --- UI SCREENS ---
-class MenuScreen(MDScreen):
-    def build_ui(self):
-        layout = MDBoxLayout(orientation='vertical', padding=40, spacing=20, pos_hint={'center_x': 0.5, 'center_y': 0.5})
+        # 2. JOB LOGIC
+        if self.job:
+            self.money += self.job['salary']
+            self.job['years'] += 1
+            # Raise / Promotion Chance
+            if random.random() < 0.15:
+                raise_amt = int(self.job['salary'] * 0.1)
+                self.job['salary'] += raise_amt
+                self.add_log(f"Got a raise! New salary: ${self.job['salary']}")
         
-        title = MDLabel(text="BITLIFE ELITE", halign="center", font_style="H3", theme_text_color="Primary")
-        layout.add_widget(title)
-        
-        btn = MDFillRoundFlatButton(
-            text="START NEW LIFE",
-            font_size=24,
-            pos_hint={'center_x': 0.5},
-            on_release=self.start_game
-        )
-        layout.add_widget(btn)
-        self.add_widget(layout)
+        # 3. HEALTH DECAY
+        if self.age > 50: self.health -= random.randint(0, 5)
+        if self.health <= 0:
+            self.alive = False
+            self.add_log("DIED of natural causes.")
+            return
 
-    def start_game(self, instance):
-        self.manager.current = 'game'
+        # 4. RANDOM EVENTS ( The Fun Stuff )
+        roll = random.random()
+        if roll < 0.05:
+            self.money += 100
+            self.add_log("Found a wallet on the street!")
+        elif roll < 0.10:
+            self.health -= 10
+            self.add_log("Contracted a weird virus.")
+        elif roll < 0.15 and self.age > 18:
+            self.add_log("Met someone special at a bar.")
+            self.relationships.append({"name": "Partner", "relation": "Dating", "love": 50})
 
+# --- UI LAYER ---
 class GameScreen(MDScreen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -77,139 +86,205 @@ class GameScreen(MDScreen):
         self.dialog = None
 
     def on_enter(self):
-        self.clear_widgets()
         self.build_ui()
 
     def build_ui(self):
-        main_layout = MDBoxLayout(orientation='vertical', padding=10, spacing=10)
-
-        # 1. DASHBOARD CARD (Stats)
-        card = MDCard(orientation='vertical', size_hint=(1, 0.25), padding=10, radius=[15])
-        self.age_lbl = MDLabel(text="AGE: 0", halign="center", font_style="H5")
-        self.money_lbl = MDLabel(text="BANK: $0", halign="center", theme_text_color="Custom", text_color=(0,1,0,1))
-        self.job_lbl = MDLabel(text="JOB: Unemployed", halign="center", font_style="Caption")
+        self.clear_widgets()
         
-        stats_box = MDBoxLayout(orientation='horizontal')
-        self.hap_lbl = MDLabel(text="Hap: 100%", halign="center")
-        self.hlt_lbl = MDLabel(text="Hlt: 100%", halign="center")
-        stats_box.add_widget(self.hap_lbl)
-        stats_box.add_widget(self.hlt_lbl)
+        # MAIN NAV LAYOUT
+        nav = MDBottomNavigation(selected_color_background="blue", text_color_active="lightblue")
 
-        card.add_widget(self.age_lbl)
-        card.add_widget(self.money_lbl)
-        card.add_widget(self.job_lbl)
-        card.add_widget(stats_box)
-        main_layout.add_widget(card)
+        # TAB 1: DASHBOARD
+        screen1 = MDBottomNavigationItem(name='dash', text='Home', icon='home')
+        layout1 = MDBoxLayout(orientation='vertical', padding=10, spacing=10)
+        
+        # Stats Card
+        self.stats_card = MDCard(orientation='vertical', size_hint=(1, 0.35), padding=15, radius=[15], md_bg_color=(0.1,0.1,0.1,1))
+        self.lbl_age = MDLabel(text="AGE: 0", font_style="H4", halign="center", theme_text_color="Custom", text_color=(1,1,1,1))
+        self.lbl_bank = MDLabel(text="$0", font_style="H5", halign="center", theme_text_color="Custom", text_color=(0,1,0,1))
+        self.lbl_bars = MDLabel(text="Hap: 100 | Hlt: 100 | Smrt: 50", halign="center", font_style="Caption")
+        self.stats_card.add_widget(self.lbl_age)
+        self.stats_card.add_widget(self.lbl_bank)
+        self.stats_card.add_widget(self.lbl_bars)
+        layout1.add_widget(self.stats_card)
 
-        # 2. EVENT LOG
-        scroll = MDScrollView(size_hint=(1, 0.5))
+        # Event Log
+        scroll = MDScrollView()
         self.log_list = MDList()
         scroll.add_widget(self.log_list)
-        main_layout.add_widget(scroll)
+        layout1.add_widget(scroll)
 
-        # 3. ACTION BUTTONS
-        actions = MDBoxLayout(orientation='horizontal', spacing=10, size_hint=(1, 0.1))
+        # AGE UP BUTTON
+        self.btn_age = MDFillRoundFlatButton(text="AGE UP (+1 Year)", font_size=22, size_hint=(1, 0.15), on_release=self.do_age_up)
+        layout1.add_widget(self.btn_age)
+        screen1.add_widget(layout1)
+
+        # TAB 2: ACTIVITIES (Jobs, Crime, Love)
+        screen2 = MDBottomNavigationItem(name='act', text='Activities', icon='star')
+        layout2 = MDScrollView()
+        list2 = MDList()
         
-        job_btn = MDRectangleFlatButton(text="JOBS", size_hint=(0.3, 1), on_release=self.show_jobs)
-        buy_btn = MDRectangleFlatButton(text="SHOP", size_hint=(0.3, 1), on_release=self.show_shop)
-        actions.add_widget(job_btn)
-        actions.add_widget(buy_btn)
-        main_layout.add_widget(actions)
-
-        # 4. AGE UP BUTTON (BIG)
-        age_btn = MDFillRoundFlatButton(text="AGE UP (+1 Year)", size_hint=(1, 0.15), font_size=20, on_release=self.age_up)
-        main_layout.add_widget(age_btn)
-
-        self.add_widget(main_layout)
-        self.log("You were born.")
-
-    def update_display(self):
-        self.age_lbl.text = f"AGE: {self.engine.age}"
-        self.money_lbl.text = f"BANK: ${self.engine.money}"
-        self.job_lbl.text = f"JOB: {self.engine.job} (${self.engine.salary}/yr)"
-        self.hap_lbl.text = f"Hap: {self.engine.happiness}%"
-        self.hlt_lbl.text = f"Hlt: {self.engine.health}%"
-
-    def log(self, text):
-        item = TwoLineListItem(text=f"Age {self.engine.age}", secondary_text=text)
-        self.log_list.add_widget(item, index=0) # Add to top
-
-    def age_up(self, instance):
-        if not self.engine.alive: return
-        event = self.engine.age_up()
-        self.log(event)
-        self.update_display()
+        acts = [
+            ("Education", "university", self.menu_edu),
+            ("Careers", "briefcase", self.menu_jobs),
+            ("Crime", "pistol", self.menu_crime),
+            ("Casino", "cards", self.menu_casino),
+            ("Assets", "home", self.menu_shop),
+            ("Doctor", "hospital", self.visit_doctor)
+        ]
         
-        if self.engine.health <= 0:
-            self.engine.alive = False
-            self.log("YOU HAVE DIED.")
-            instance.text = "GAME OVER"
-            instance.disabled = True
+        for name, icon, func in acts:
+            item = OneLineAvatarIconListItem(text=name, on_release=func)
+            item.add_widget(IconLeftWidget(icon=icon))
+            list2.add_widget(item)
+            
+        layout2.add_widget(list2)
+        screen2.add_widget(layout2)
 
-    # --- POPUPS ---
-    def show_jobs(self, instance):
-        if self.engine.age < 18:
-            self.log("Too young to work!"); return
+        nav.add_widget(screen1)
+        nav.add_widget(screen2)
+        self.add_widget(nav)
+        self.update_ui()
+
+    # --- UPDATE LOOPS ---
+    def update_ui(self):
+        e = self.engine
+        self.lbl_age.text = f"AGE: {e.age}"
+        self.lbl_bank.text = f"${e.money:,}"
+        self.lbl_bars.text = f"Hap: {e.happiness}% | Hlt: {e.health}% | Smrt: {e.smarts}%"
         
-        self.close_dialog()
-        # Simple job list
-        jobs = [("Janitor", 15000), ("Developer", 60000), ("Doctor", 120000)]
-        content = MDBoxLayout(orientation='vertical', size_hint_y=None, height=200)
+        if e.job:
+            self.lbl_bank.text += f" ({e.job['title']})"
+        elif e.jail_years > 0:
+            self.lbl_bank.text += " (IN JAIL)"
+
+        self.log_list.clear_widgets()
+        for i in range(min(20, len(e.log))):
+            self.log_list.add_widget(TwoLineListItem(text=e.log[i], secondary_text=""))
+
+    def do_age_up(self, *args):
+        self.engine.age_up()
+        self.update_ui()
+
+    # --- ACTIVITY MENUS ---
+    def menu_jobs(self, *args):
+        if self.engine.age < 16:
+            self.show_popup("Child Labor Laws", "You are too young to work.")
+            return
         
-        for name, salary in jobs:
-            b = MDRectangleFlatButton(text=f"{name} (${salary})", on_release=lambda x, n=name, s=salary: self.apply_job(n, s))
-            content.add_widget(b)
+        jobs = [("Janitor", 15000), ("Apprentice", 30000), ("Soldier", 40000), ("Brain Surgeon", 250000)]
+        self.show_list_popup("Job Board", jobs, self.apply_job)
 
-        self.dialog = MDDialog(title="Job Listings", type="custom", content_cls=content)
-        self.dialog.open()
-
-    def apply_job(self, name, salary):
-        self.engine.job = name
-        self.engine.salary = salary
-        self.log(f"Hired as {name}!")
-        self.update_display()
-        self.close_dialog()
-
-    def show_shop(self, instance):
-        self.close_dialog()
-        items = [("Used Car", 5000), ("House", 100000), ("Fancy Suit", 1000)]
-        content = MDBoxLayout(orientation='vertical', size_hint_y=None, height=200)
+    def apply_job(self, title, salary):
+        # Intelligence Check
+        req_smarts = 0
+        if title == "Brain Surgeon": req_smarts = 80
+        if title == "Apprentice": req_smarts = 40
         
-        for name, price in items:
-            b = MDRectangleFlatButton(text=f"{name} (${price})", on_release=lambda x, n=name, p=price: self.buy_item(n, p))
-            content.add_widget(b)
+        if self.engine.smarts >= req_smarts:
+            self.engine.job = {"title": title, "salary": salary, "years": 0}
+            self.engine.add_log(f"Hired as {title}!")
+            self.show_popup("Success", f"You are now a {title}.")
+        else:
+            self.engine.add_log(f"Rejected from {title}.")
+            self.show_popup("Rejected", "They said you aren't smart enough.")
+        self.update_ui()
 
-        self.dialog = MDDialog(title="Marketplace", type="custom", content_cls=content)
-        self.dialog.open()
+    def menu_crime(self, *args):
+        crimes = [("Shoplift", 100, 0.1), ("Rob House", 5000, 0.3), ("Bank Heist", 1000000, 0.7)]
+        # Passing tuple as data, custom handler needed
+        self.show_list_popup("Life of Crime", crimes, self.commit_crime)
 
-    def buy_item(self, name, price):
+    def commit_crime(self, name, reward, risk):
+        if random.random() > risk:
+            # Success
+            self.engine.money += reward
+            self.engine.add_log(f"SUCCESS! Committed {name}, stole ${reward}.")
+            self.show_popup("Criminal Mastermind", f"You stole ${reward}!")
+        else:
+            # Jail
+            sentence = random.randint(2, 10)
+            self.engine.jail_years = sentence
+            self.engine.job = None
+            self.engine.criminal_record = True
+            self.engine.add_log(f"ARRESTED for {name}. Sentenced to {sentence} years.")
+            self.show_popup("BUSTED", f"You are going to prison for {sentence} years.")
+        self.update_ui()
+
+    def menu_casino(self, *args):
+        if self.engine.money < 100:
+            self.show_popup("Broke", "You need at least $100.")
+            return
+        
+        # Simple Coin Flip Gamble
+        wager = 100
+        if random.random() > 0.5:
+            self.engine.money += wager
+            self.engine.add_log("Won $100 at Blackjack.")
+        else:
+            self.engine.money -= wager
+            self.engine.add_log("Lost $100 at Blackjack.")
+        self.update_ui()
+
+    def menu_edu(self, *args):
+        self.engine.smarts += random.randint(1, 5)
+        self.engine.add_log("Studied hard at the library.")
+        self.show_popup("Nerd", "Your smarts increased.")
+        self.update_ui()
+        
+    def visit_doctor(self, *args):
+        if self.engine.money < 500:
+            self.show_popup("American Healthcare", "You can't afford a doctor ($500).")
+            return
+        self.engine.money -= 500
+        self.engine.health = 100
+        self.engine.add_log("Doctor cured all your ailments.")
+        self.update_ui()
+
+    def menu_shop(self, *args):
+         items = [("Used Car", 5000), ("Luxury Condo", 500000), ("Supercar", 200000)]
+         self.show_list_popup("Asset Dealership", items, self.buy_asset)
+
+    def buy_asset(self, name, price):
         if self.engine.money >= price:
             self.engine.money -= price
             self.engine.assets.append(name)
-            self.log(f"Bought a {name}!")
+            self.engine.add_log(f"Purchased {name}.")
+            self.show_popup("Sweet Ride", f"You bought a {name}!")
         else:
-            self.log(f"Can't afford {name}.")
-        self.update_display()
-        self.close_dialog()
+            self.show_popup("Too Poor", "Get a better job.")
+        self.update_ui()
 
-    def close_dialog(self, *args):
+    # --- HELPERS ---
+    def show_popup(self, title, text):
         if self.dialog: self.dialog.dismiss()
+        self.dialog = MDDialog(title=title, text=text, buttons=[MDFillRoundFlatButton(text="OK", on_release=lambda x: self.dialog.dismiss())])
+        self.dialog.open()
 
-class BitLifeApp(MDApp):
+    def show_list_popup(self, title, items, callback):
+        if self.dialog: self.dialog.dismiss()
+        content = MDBoxLayout(orientation='vertical', size_hint_y=None, height=300)
+        
+        # Items is list of tuples. If 3 args (Crime), handle differently
+        for item in items:
+            txt = item[0]
+            val1 = item[1]
+            # Handle variable arguments for callback
+            if len(item) == 3:
+                val2 = item[2]
+                btn = MDRectangleFlatButton(text=f"{txt}", on_release=lambda x, a=txt, b=val1, c=val2: [callback(a,b,c), self.dialog.dismiss()])
+            else:
+                btn = MDRectangleFlatButton(text=f"{txt} (${val1})", on_release=lambda x, a=txt, b=val1: [callback(a,b), self.dialog.dismiss()])
+            content.add_widget(btn)
+
+        self.dialog = MDDialog(title=title, type="custom", content_cls=content)
+        self.dialog.open()
+
+class Gen3App(MDApp):
     def build(self):
         self.theme_cls.theme_style = "Dark"
-        self.theme_cls.primary_palette = "Teal"
-        
-        sm = MDScreenManager()
-        
-        menu = MenuScreen(name='menu')
-        menu.build_ui()
-        sm.add_widget(menu)
-        
-        game = GameScreen(name='game')
-        sm.add_widget(game)
-        
-        return sm
+        self.theme_cls.primary_palette = "DeepPurple"
+        return GameScreen()
 
 if __name__ == "__main__":
-    BitLifeApp().run()
+    Gen3App().run()
