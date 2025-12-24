@@ -352,6 +352,7 @@ class GameScreen(Screen):
     def on_enter(self):
         self.app = MDApp.get_running_app()
         self.engine = self.app.engine
+        self._current_dialog = None # Initialize dialog state for safer checking
         self.build_ui()
         Clock.schedule_interval(self.check_dialog_queue, 0.5)
 
@@ -446,7 +447,7 @@ class GameScreen(Screen):
         else: self.app.theme_cls.primary_palette = "DeepPurple"       # Normal
 
         # Process dialog queue
-        if e.dialog_queue and not hasattr(self, '_current_dialog') or not self._current_dialog.is_open:
+        if e.dialog_queue and (self._current_dialog is None or not self._current_dialog.is_open):
             title, text, opts = e.dialog_queue.pop(0)
             self.show_popup(title, text, opts)
 
@@ -459,7 +460,7 @@ class GameScreen(Screen):
         if self.engine.scenario == "wallet":
             self.show_popup("Found Wallet", "You found a wallet with $500. What do you do?", [("Keep (Karma-)", self.scen_keep), ("Return (Karma+)", self.scen_ret)])
             self.engine.scenario = None
-        elif self.engine.game_over_reason and not hasattr(self, '_current_dialog') or not self._current_dialog.is_open:
+        elif self.engine.game_over_reason and (self._current_dialog is None or not self._current_dialog.is_open):
             # Game Over dialog should be handled by engine.dialog_queue now
             pass
         
@@ -473,9 +474,10 @@ class GameScreen(Screen):
         self._current_dialog.open()
 
     def run_scen(self, func):
-        self._current_dialog.dismiss()
+        if self._current_dialog: # Ensure dialog exists before dismissing
+            self._current_dialog.dismiss()
+            self._current_dialog = None # Clear reference safely
         func()
-        del self._current_dialog # Clear reference
         self.update() # Refresh after choice
 
     def scen_keep(self): 
@@ -494,6 +496,7 @@ class MenuScreen(Screen):
         super().__init__(name=name, **kwargs)
         self.app = MDApp.get_running_app()
         self.engine = self.app.engine
+        self.dialog = None # Initialize dialog state for MenuScreen as well
 
     def on_enter(self):
         self.engine = self.app.engine # Ensure engine is updated on screen entry
@@ -665,13 +668,15 @@ class MenuScreen(Screen):
         asset = self.engine.assets[idx]
         def sell_confirmed(*args):
             self.sell_asset(idx)
-            self.dialog.dismiss()
+            if self.dialog: # Ensure dialog exists before dismissing
+                self.dialog.dismiss()
+                self.dialog = None
         
         self.dialog = MDDialog(
             title="Sell Asset?",
             text=f"Are you sure you want to sell your {asset['name']} for ${asset['val']:,}?",
             buttons=[
-                MDRectangleFlatButton(text="CANCEL", on_release=lambda x: self.dialog.dismiss()),
+                MDRectangleFlatButton(text="CANCEL", on_release=lambda x: (self.dialog.dismiss(), setattr(self, 'dialog', None))),
                 MDFillRoundFlatButton(text="SELL", md_bg_color=(0.8,0,0,1), on_release=sell_confirmed)
             ]
         )
@@ -831,7 +836,9 @@ class MenuScreen(Screen):
 
     def interact_relation(self, rel_obj):
         def offer_marriage_confirmed(*args):
-            self.dialog.dismiss()
+            if self.dialog: # Ensure dialog exists before dismissing
+                self.dialog.dismiss()
+                self.dialog = None
             if self.engine.married_to:
                 self.engine.log(f"You are already married to {self.engine.married_to}.", SPRITES['Sad'])
                 self.back()
@@ -848,7 +855,9 @@ class MenuScreen(Screen):
             self.back()
 
         def try_improve_relationship_confirmed(*args):
-            self.dialog.dismiss()
+            if self.dialog: # Ensure dialog exists before dismissing
+                self.dialog.dismiss()
+                self.dialog = None
             cost = random.randint(50, 200)
             if self.engine.money >= cost:
                 self.engine.money -= cost
@@ -865,7 +874,7 @@ class MenuScreen(Screen):
             buttons.append(MDRectangleFlatButton(text="Propose Marriage", on_release=offer_marriage_confirmed))
         
         buttons.append(MDRectangleFlatButton(text="Improve Relationship", on_release=try_improve_relationship_confirmed))
-        buttons.append(MDRectangleFlatButton(text="Back", on_release=lambda x: self.dialog.dismiss()))
+        buttons.append(MDRectangleFlatButton(text="Back", on_release=lambda x: (self.dialog.dismiss(), setattr(self, 'dialog', None))))
 
         self.dialog = MDDialog(
             title=f"Interact with {rel_obj['name']}",
