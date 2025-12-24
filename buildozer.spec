@@ -1,6 +1,6 @@
 [app]
-title = Life Simulator
-package.name = lifesimulator
+title = Hello World App
+package.name = helloworldapp
 package.domain = org.test
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas
