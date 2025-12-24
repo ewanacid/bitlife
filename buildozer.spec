@@ -1,6 +1,6 @@
 [app]
-title = BitLife Gen3
-package.name = bitlifegen3
+title = BitLife Elite
+package.name = bitlifeelite
 package.domain = org.nfg
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ttf
@@ -14,7 +14,6 @@ android.api = 33
 android.minapi = 21
 android.archs = arm64-v8a
 android.presplash_color = #000000
-
 [buildozer]
 log_level = 2
 warn_on_root = 1
