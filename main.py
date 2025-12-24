@@ -15,6 +15,7 @@ from kivymd.uix.button import MDFillRoundFlatButton, MDRectangleFlatButton
 from kivymd.uix.scrollview import MDScrollView
 from kivymd.uix.progressbar import MDProgressBar
 from kivymd.uix.dialog import MDDialog
+from kivymd.uix.textfield import MDTextField # Added for name input
 from kivy.properties import StringProperty, NumericProperty, ObjectProperty, DictProperty, ListProperty, BooleanProperty
 from kivy.clock import Clock
 # HAPTIC FEEDBACK
@@ -75,12 +76,45 @@ SKILLS_LEARN = {
 # --- DEEP SIMULATION ENGINE ---
 class SimEngine:
     def __init__(self):
-        self.reset()
+        # Character creation attributes, set by CharacterCreationScreen
+        self.char_name = ""
+        self.char_gender = "Male" # Default gender
+        
+        # Initial stats that can be randomized for character creation
+        self.initial_smrt = 0
+        self.initial_look = 0
+        self.initial_hap = 0
+        self.initial_hlt = 0
+        self.initial_karma = 0
+        self.initial_stress = 0
+        self.initial_energy = 0
+        self.initial_fame = 0
+        self.generate_initial_stats() # Generate first set of stats on init
+
+        self.reset() # Call reset to set up game with default/generated initial values
         self.dialog_queue = []
 
+    def generate_initial_stats(self):
+        """Generates a random set of starting stats for a new character."""
+        self.initial_smrt = random.randint(20, 90)
+        self.initial_look = random.randint(20, 90)
+        self.initial_hap = random.randint(70, 100)
+        self.initial_hlt = random.randint(80, 100)
+        self.initial_karma = random.randint(-10, 10)
+        self.initial_stress = random.randint(10, 30)
+        self.initial_energy = random.randint(80, 100)
+        self.initial_fame = random.randint(-5, 5)
+
+    def set_character_details(self, name, gender):
+        """Sets the character's chosen name and gender from the creation screen."""
+        self.char_name = name
+        self.char_gender = gender
+        # These will be picked up by the next call to reset()
+
     def reset(self):
-        self.name = f"{random.choice(['Liam','Noah','Oliver','James','Emma','Ava'])} {random.choice(['Smith','Jones','Brown','Garcia'])}"
-        self.gender = random.choice(["Male", "Female"])
+        # Use chosen name and gender, or generate if not set (should be set by char creation)
+        self.name = self.char_name if self.char_name else f"{random.choice(['Liam','Noah','Oliver','James','Emma','Ava'])} {random.choice(['Smith','Jones','Brown','Garcia'])}"
+        self.gender = self.char_gender if self.char_gender else random.choice(["Male", "Female"])
         self.face = SPRITES[self.gender]
         self.age = 0
         self.money = 0
@@ -89,15 +123,15 @@ class SimEngine:
         self.current_education = None # Stores current ongoing education program
         self.education_years_left = 0
         
-        # CORE STATS
-        self.hap = 90 # Happiness
-        self.hlt = 100 # Health
-        self.smrt = random.randint(20, 90) # Smartness
-        self.look = random.randint(20, 90) # Looks
-        self.karma = 0 # Karma (-100 to 100)
-        self.stress = 20 # Stress (0 to 100, impacts hap/hlt)
-        self.energy = 100 # Energy (0 to 100, impacts actions)
-        self.fame = 0 # Fame (-100 to 100)
+        # CORE STATS - use the initial values generated for character creation
+        self.hap = self.initial_hap
+        self.hlt = self.initial_hlt
+        self.smrt = self.initial_smrt
+        self.look = self.initial_look
+        self.karma = self.initial_karma
+        self.stress = self.initial_stress
+        self.energy = self.initial_energy
+        self.fame = self.initial_fame
         
         self.alive = True
         self.jail = 0
@@ -154,9 +188,14 @@ class SimEngine:
             if self.money >= yearly_cost:
                 self.adjust_stat("money", -yearly_cost, allow_below_min=True)
             else:
-                self.log(f"Couldn't afford yearly tuition for {self.current_education['degree']}.", SPRITES['Sad'])
-                self.adjust_stat("smrt", -5) # Penalty for missed payment
-                self.adjust_stat("stress", 10)
+                self.log(f"Couldn't afford yearly tuition for {self.current_education['degree']}. Dropped out.", SPRITES['Sad'])
+                self.adjust_stat("smrt", -10) # Penalty for missed payment and dropping out
+                self.adjust_stat("stress", 20)
+                self.education = "None" # Reset education status
+                self.current_education = None # Clear current education
+                self.education_years_left = 0
+                return # Skip further actions this year if dropped out
+
             self.log(f"Studying for {self.current_education['degree']} ({self.education_years_left} yrs left).", SPRITES['Study'])
             if self.education_years_left <= 0:
                 self.education = self.current_education['degree']
@@ -337,12 +376,12 @@ class SimEngine:
         return self.skills.get(skill_name, 0)
 
     def reset_game(self):
-        self.reset()
+        self.generate_initial_stats() # Generate new stats for the next character
+        self.char_name = "" # Clear character details
+        self.char_gender = "Male" # Reset to default for next creation
+        self.reset() # Reset game state using new initial stats
         app = MDApp.get_running_app()
-        app.root.get_screen('game').build_ui() # Rebuild UI for new game state
-        app.root.get_screen('game').update()
-        app.root.current = 'game' # Ensure we are on game screen
-
+        app.root.current = 'char_create' # Go back to character creation screen
 
 # --- UI COMPONENTS ---
 
@@ -449,16 +488,125 @@ class StatBar(MDBoxLayout):
         bar_val_clamped = max(0, min(100, val))
         self.bar.value = bar_val_clamped
 
+# --- CHARACTER CREATION SCREEN ---
+class CharacterCreationScreen(Screen):
+    selected_gender = StringProperty("Male") # Default selected gender
+
+    def on_enter(self):
+        self.app = MDApp.get_running_app()
+        self.engine = self.app.engine
+        self.engine.generate_initial_stats() # Always generate fresh stats when entering screen
+        self.build_ui()
+        self.update_stats_display()
+
+    def build_ui(self):
+        self.clear_widgets()
+        layout = MDBoxLayout(orientation='vertical', padding=dp(20), spacing=dp(15))
+        
+        layout.add_widget(MDLabel(text="CREATE YOUR CHARACTER", font_style="H4", halign="center", size_hint_y=0.15))
+
+        # Name Input
+        self.name_input = MDTextField(
+            id='name_input',
+            hint_text="Enter Name",
+            helper_text="First and Last Name",
+            helper_text_mode="on_focus",
+            max_text_length=30,
+            size_hint_y=None,
+            height=dp(48)
+        )
+        self.name_input.text = self.engine.char_name if self.engine.char_name else random.choice(['Liam','Noah','Oliver','James','Emma','Ava']) + ' ' + random.choice(['Smith','Jones','Brown','Garcia'])
+        layout.add_widget(self.name_input)
+
+        # Gender Selection
+        gender_box = MDBoxLayout(size_hint_y=None, height=dp(48), spacing=dp(10))
+        self.btn_male = MDFillRoundFlatButton(
+            text=f"{SPRITES['Male']} Male",
+            on_release=lambda x: self.select_gender("Male")
+        )
+        self.btn_female = MDFillRoundFlatButton(
+            text=f"{SPRITES['Female']} Female",
+            on_release=lambda x: self.select_gender("Female")
+        )
+        gender_box.add_widget(self.btn_male)
+        gender_box.add_widget(self.btn_female)
+        layout.add_widget(gender_box)
+
+        # Stat Display Area
+        stats_display_layout = MDBoxLayout(orientation='vertical', size_hint_y=0.3, padding=dp(10), spacing=dp(5),
+                                           md_bg_color=[0.15,0.15,0.15,1], radius=[dp(10)])
+        stats_display_layout.add_widget(MDLabel(text="[color=#FFFFFF]Initial Stats:[/color]", markup=True, font_style="Subtitle1"))
+        
+        self.stat_labels = {}
+        for stat_name, color, is_percent in [("Smrt", (0,0,1,1), True), ("Look", (1,0.5,0,1), True), 
+                                             ("Hap", (0,1,0,1), True), ("Hlt", (1,0,0,1), True),
+                                             ("Karma", (0.5,0,0.5,1), False), ("Stress", (0.8,0.4,0,1), True)]:
+            lbl = MDLabel(text="", theme_text_color="Custom", text_color=color, markup=True)
+            self.stat_labels[stat_name] = lbl
+            stats_display_layout.add_widget(lbl)
+        
+        layout.add_widget(stats_display_layout)
+
+        # Action Buttons
+        button_box = MDBoxLayout(size_hint_y=0.2, spacing=dp(10))
+        btn_randomize = MDRectangleFlatButton(text="Randomize Stats", on_release=self.randomize_stats)
+        btn_start = MDFillRoundFlatButton(text="START GAME", on_release=self.start_game)
+        button_box.add_widget(btn_randomize)
+        button_box.add_widget(btn_start)
+        layout.add_widget(button_box)
+
+        self.add_widget(layout)
+        self.select_gender(self.engine.char_gender) # Update initial gender selection
+        self.update_stats_display()
+
+    def select_gender(self, gender):
+        self.selected_gender = gender
+        self.engine.char_gender = gender # Update engine's default for face sprite
+        # Visually update selected button
+        self.btn_male.md_bg_color = (0.2, 0.2, 0.2, 1) if gender == "Female" else MDApp.get_running_app().theme_cls.primary_color
+        self.btn_female.md_bg_color = (0.2, 0.2, 0.2, 1) if gender == "Male" else MDApp.get_running_app().theme_cls.primary_color
+        
+    def randomize_stats(self, *args):
+        self.engine.generate_initial_stats()
+        self.update_stats_display()
+
+    def update_stats_display(self):
+        e = self.engine
+        self.stat_labels["Smrt"].text = f"[color={self.stat_labels['Smrt'].text_color}]🧠 Smartness: {e.initial_smrt}%[/color]"
+        self.stat_labels["Look"].text = f"[color={self.stat_labels['Look'].text_color}]😎 Looks: {e.initial_look}%[/color]"
+        self.stat_labels["Hap"].text = f"[color={self.stat_labels['Hap'].text_color}]😃 Happiness: {e.initial_hap}%[/color]"
+        self.stat_labels["Hlt"].text = f"[color={self.stat_labels['Hlt'].text_color}]❤️ Health: {e.initial_hlt}%[/color]"
+        self.stat_labels["Karma"].text = f"[color={self.stat_labels['Karma'].text_color}]⚖️ Karma: {e.initial_karma}[/color]"
+        self.stat_labels["Stress"].text = f"[color={self.stat_labels['Stress'].text_color}]🤯 Stress: {e.initial_stress}%[/color]"
+
+
+    def start_game(self, *args):
+        name = self.name_input.text.strip()
+        if not name:
+            name = random.choice(['Liam','Noah','Oliver','James','Emma','Ava']) + ' ' + random.choice(['Smith','Jones','Brown','Garcia'])
+            self.name_input.text = name # Set a default name if user leaves it empty
+        
+        self.engine.set_character_details(name, self.selected_gender)
+        # The engine's reset() will use these details and the pre-generated initial stats
+        self.app.engine.reset() # This reset uses the newly set char_name, char_gender and initial_stats
+        
+        # Build and update game UI then switch screen
+        self.app.root.get_screen('game').build_ui()
+        self.app.root.get_screen('game').update()
+        self.app.root.current = 'game'
+
 # --- MAIN SCREEN ---
 class GameScreen(Screen):
     def on_enter(self):
         self.app = MDApp.get_running_app()
         self.engine = self.app.engine
         self._current_dialog = None # Initialize dialog state for safer checking
-        self.build_ui()
+        # build_ui is called by CharacterCreationScreen.start_game, so it should be built
+        # self.build_ui() # This line should not be needed here anymore if char creation handles it
         Clock.schedule_interval(self.check_dialog_queue, 0.5)
 
     def build_ui(self):
+        # This method is now called externally after character creation or on new game reset
         self.clear_widgets()
         root = MDBoxLayout(orientation='vertical', padding=[dp(10), dp(5)], spacing=dp(5))
 
@@ -1071,8 +1219,9 @@ class Year3000App(MDApp):
     def build(self):
         self.theme_cls.theme_style = "Dark"
         self.theme_cls.primary_palette = "DeepPurple"
-        self.engine = SimEngine()
+        self.engine = SimEngine() # Initialize engine
         sm = ScreenManager(transition=NoTransition())
+        sm.add_widget(CharacterCreationScreen(name='char_create')) # First screen
         sm.add_widget(GameScreen(name='game'))
         for m in ['job', 'asset', 'act', 'rel']: sm.add_widget(MenuScreen(name=m))
         return sm
