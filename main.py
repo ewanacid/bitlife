@@ -2,17 +2,20 @@ import os, sys, random, json, traceback
 # FORCE STABILITY
 os.environ["KIVY_NO_ARGS"] = "1"
 
+from kivy.metrics import dp
+from kivy.uix.recycleview import RecycleView
+from kivy.uix.recycleview.views import RecycleDataViewBehavior
+from kivy.uix.recycleboxlayout import RecycleBoxLayout
+from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.screenmanager import ScreenManager, Screen, NoTransition
 from kivymd.app import MDApp
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.label import MDLabel
 from kivymd.uix.button import MDFillRoundFlatButton, MDRectangleFlatButton
-from kivymd.uix.list import MDList, TwoLineListItem, OneLineListItem
 from kivymd.uix.scrollview import MDScrollView
 from kivymd.uix.progressbar import MDProgressBar
 from kivymd.uix.dialog import MDDialog
-from kivymd.uix.selectioncontrol import MDSwitch
-from kivy.properties import StringProperty, NumericProperty, ObjectProperty, DictProperty, ListProperty
+from kivy.properties import StringProperty, NumericProperty, ObjectProperty, DictProperty, ListProperty, BooleanProperty
 from kivy.clock import Clock
 # HAPTIC FEEDBACK
 from plyer import vibrator
@@ -146,7 +149,14 @@ class SimEngine:
             self.education_years_left -= 1
             self.adjust_stat("smrt", self.current_education['smrt_gain'] / self.current_education['duration'])
             self.adjust_stat("stress", 10)
-            self.adjust_stat("money", -self.current_education['cost'] / self.current_education['duration'])
+            # Ensure cost is divided over duration and only paid if money is available
+            yearly_cost = self.current_education['cost'] / self.current_education['duration']
+            if self.money >= yearly_cost:
+                self.adjust_stat("money", -yearly_cost, allow_below_min=True)
+            else:
+                self.log(f"Couldn't afford yearly tuition for {self.current_education['degree']}.", SPRITES['Sad'])
+                self.adjust_stat("smrt", -5) # Penalty for missed payment
+                self.adjust_stat("stress", 10)
             self.log(f"Studying for {self.current_education['degree']} ({self.education_years_left} yrs left).", SPRITES['Study'])
             if self.education_years_left <= 0:
                 self.education = self.current_education['degree']
@@ -171,7 +181,7 @@ class SimEngine:
                 # Promotion/Layoff Chance
                 if random.random() < job_data['promo_chance']:
                     self.log(f"Got a promotion at {self.career}!", SPRITES['Promotion'])
-                    self.adjust_stat("money", 5000); self.adjust_stat("hap", 10); self.adjust_stat("fame", 5); self.adjust_stat("stress", -10)
+                    self.adjust_stat("money", 5000, allow_below_min=True); self.adjust_stat("hap", 10); self.adjust_stat("fame", 5); self.adjust_stat("stress", -10)
                 elif random.random() < job_data['layoff_chance']:
                     self.log(f"Laid off from {self.career}!", SPRITES['Layoff'])
                     self.career = "Unemployed"; self.adjust_stat("hap", -20); self.adjust_stat("stress", 30); self.adjust_stat("fame", -5)
@@ -182,12 +192,22 @@ class SimEngine:
             props = asset['props']
             if asset['type'] == 'House':
                 asset['val'] = int(asset['val'] * (1 + props.get('appreciation', 0.0)))
-                self.money -= props.get('upkeep', 0)
-                if props.get('upkeep', 0) > 0: self.log(f"Paid ${props['upkeep']:,} upkeep for {asset['name']}.", SPRITES['Money'])
+                upkeep = props.get('upkeep', 0)
+                if self.money >= upkeep:
+                    self.money -= upkeep
+                    if upkeep > 0: self.log(f"Paid ${upkeep:,} upkeep for {asset['name']}.", SPRITES['Money'])
+                else:
+                    self.log(f"Couldn't afford upkeep for {asset['name']}. Asset value decreased.", SPRITES['Sad'])
+                    asset['val'] = int(asset['val'] * 0.9) # Penalty for not paying upkeep
             elif asset['type'] == 'Car':
                 asset['val'] = int(asset['val'] * (1 - props.get('depreciation', 0.0)))
-                self.money -= props.get('upkeep', 0)
-                if props.get('upkeep', 0) > 0: self.log(f"Paid ${props['upkeep']:,} for {asset['name']} maintenance.", SPRITES['Money'])
+                upkeep = props.get('upkeep', 0)
+                if self.money >= upkeep:
+                    self.money -= upkeep
+                    if upkeep > 0: self.log(f"Paid ${upkeep:,} for {asset['name']} maintenance.", SPRITES['Money'])
+                else:
+                    self.log(f"Couldn't afford maintenance for {asset['name']}. Car deteriorated.", SPRITES['Sad'])
+                    asset['val'] = int(asset['val'] * 0.8) # Penalty for not maintaining
                 if asset['val'] < 1000 and random.random() < 0.2: # Old car breaks down
                     self.log(f"{asset['name']} broke down and sold for scrap.", SPRITES['Sad'])
                     self.money += 200 # Scrap value
@@ -317,21 +337,95 @@ class SimEngine:
         return self.skills.get(skill_name, 0)
 
     def reset_game(self):
-        MDApp.get_running_app().engine.reset()
-        MDApp.get_running_app().root.get_screen('game').build_ui() # Rebuild UI for new game state
-        MDApp.get_running_app().root.get_screen('game').update()
-        MDApp.get_running_app().root.current = 'game' # Ensure we are on game screen
+        self.reset()
+        app = MDApp.get_running_app()
+        app.root.get_screen('game').build_ui() # Rebuild UI for new game state
+        app.root.get_screen('game').update()
+        app.root.current = 'game' # Ensure we are on game screen
 
 
 # --- UI COMPONENTS ---
+
+# RecycleView item for game log
+class LogEntryViewClass(RecycleDataViewBehavior, MDLabel):
+    """A simple MDLabel that acts as a view for RecycleView data."""
+    def refresh_view_attrs(self, rv, index, data):
+        self.text = data['text']
+        self.halign = 'left'
+        self.valign = 'middle'
+        self.size_hint_y = None
+        self.height = dp(32) # Standard height for one-line items
+        self.theme_text_color = "Primary"
+        self.markup = True # Allow color tags in text
+        return super().refresh_view_attrs(rv, index, data)
+
+# RecycleView item for menu lists
+class SelectableTwoLineIconListItem(RecycleDataViewBehavior, ButtonBehavior, MDBoxLayout):
+    text = StringProperty()
+    secondary_text = StringProperty()
+    icon = StringProperty("")
+    callback = ObjectProperty(None)
+    disabled = BooleanProperty(False)
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.orientation = 'vertical'
+        self.padding = [dp(10), dp(5)] # Left/Right, Top/Bottom
+        self.spacing = dp(2)
+        self.size_hint_y = None
+        self.height = dp(64) # Typical height for two-line item
+
+        self.primary_label = MDLabel(
+            markup=True,
+            font_style="Subtitle1",
+            theme_text_color="Primary",
+            text_size=(self.width - dp(20), None), # Adjusted for padding
+            valign="middle"
+        )
+        self.secondary_label = MDLabel(
+            markup=True,
+            font_style="Caption",
+            theme_text_color="Secondary",
+            text_size=(self.width - dp(20), None), # Adjusted for padding
+            valign="middle"
+        )
+        self.clear_widgets() # Ensure no default widgets are added
+        self.add_widget(self.primary_label)
+        self.add_widget(self.secondary_label)
+
+    def refresh_view_attrs(self, rv, index, data):
+        self.text = data['text']
+        self.secondary_text = data.get('secondary_text', '')
+        self.icon = data.get('icon', '')
+        self.callback = data.get('callback', None)
+        self.disabled = data.get('disabled', False)
+
+        main_text_content = f"{self.icon} {self.text}" if self.icon else self.text
+        if self.disabled:
+            self.primary_label.text = f"[color=808080]{main_text_content}[/color]"
+            self.secondary_label.text = f"[color=808080]{self.secondary_text}[/color]"
+            self.md_bg_color = [0.15, 0.15, 0.15, 1] # Darker bg for disabled
+        else:
+            self.primary_label.text = main_text_content
+            self.secondary_label.text = self.secondary_text
+            self.md_bg_color = [0.2, 0.2, 0.2, 1] # Normal bg
+
+        return super().refresh_view_attrs(rv, index, data)
+
+    def on_release(self):
+        if not self.disabled and self.callback:
+            self.callback()
+
 class StatBar(MDBoxLayout):
     lbl_text = StringProperty("")
     bar_value = NumericProperty(0)
     bar_color = ListProperty([0, 0, 0, 1])
+    is_percent = BooleanProperty(True) # New property
 
-    def __init__(self, label, value, color, **kwargs):
+    def __init__(self, label, value, color, is_percent=True, **kwargs):
         super().__init__(orientation='vertical', size_hint_x=0.25, **kwargs)
-        self.lbl_text = f"{label}: {value}%"
+        self.is_percent = is_percent
+        self.update_label_text(label, value) # Helper to set text
         self.bar_value = value
         self.bar_color = color
         
@@ -340,12 +434,20 @@ class StatBar(MDBoxLayout):
         self.bar = MDProgressBar(value=self.bar_value, color=self.bar_color, size_hint_y=None, height="6dp")
         self.add_widget(self.bar)
 
+    def update_label_text(self, label_base, value):
+        if self.is_percent:
+            display_val = max(0, min(100, value)) # Clamp for % display
+            self.lbl_text = f"{label_base}: {int(display_val)}%"
+        else:
+            self.lbl_text = f"{label_base}: {int(value)}" # Display raw value
+    
     def update(self, val):
-        if val > 100: val = 100
-        if val < 0 and self.lbl.text.split(':')[0] not in ["Karma", "Fame"]: val = 0 # Karma/Fame can be negative
-
-        self.lbl.text = f"{self.lbl.text.split(':')[0]}: {val}%"
-        self.bar.value = val
+        label_base = self.lbl.text.split(':')[0]
+        self.update_label_text(label_base, val)
+        
+        # Clamp bar value to 0-100 for visual consistency of the progress bar
+        bar_val_clamped = max(0, min(100, val))
+        self.bar.value = bar_val_clamped
 
 # --- MAIN SCREEN ---
 class GameScreen(Screen):
@@ -358,12 +460,12 @@ class GameScreen(Screen):
 
     def build_ui(self):
         self.clear_widgets()
-        root = MDBoxLayout(orientation='vertical', padding=[10, 5], spacing=5)
+        root = MDBoxLayout(orientation='vertical', padding=[dp(10), dp(5)], spacing=dp(5))
 
         # IDENTITY HEADER
-        head = MDBoxLayout(orientation='horizontal', size_hint=(1, 0.15))
+        head = MDBoxLayout(orientation='horizontal', size_hint_y=0.15)
         self.lbl_face = MDLabel(text=self.engine.face, font_style="H2", size_hint_x=0.2, halign="center")
-        info = MDBoxLayout(orientation='vertical')
+        info = MDBoxLayout(orientation='vertical', padding=[dp(5), 0, 0, 0])
         self.lbl_name = MDLabel(text="Name", font_style="H6", bold=True)
         self.lbl_job = MDLabel(text="Job", theme_text_color="Secondary")
         self.lbl_bank = MDLabel(text="$$$", theme_text_color="Custom", text_color=(0,1,0,1))
@@ -371,20 +473,24 @@ class GameScreen(Screen):
         head.add_widget(self.lbl_face); head.add_widget(info)
         root.add_widget(head)
 
-        # SCROLLABLE LOG
+        # SCROLLABLE LOG using RecycleView for performance
         scroll = MDScrollView(size_hint=(1, 0.45))
-        self.log_list = MDList()
-        scroll.add_widget(self.log_list)
+        self.log_rv = RecycleView(viewclass=LogEntryViewClass)
+        self.log_rv.data = [] # Initial empty data
+        self.log_rv_layout = RecycleBoxLayout(default_size=(None, dp(32)), default_size_hint=(1, None),
+                                                orientation='vertical', size_hint_y=None, spacing=dp(2))
+        self.log_rv.add_widget(self.log_rv_layout)
+        scroll.add_widget(self.log_rv)
         root.add_widget(scroll)
 
         # AGE BUTTON
-        age_box = MDBoxLayout(padding=[30, 5], size_hint=(1, 0.12))
+        age_box = MDBoxLayout(padding=[dp(30), dp(5)], size_hint=(1, 0.12))
         self.age_button = MDFillRoundFlatButton(text="AGE UP +", font_size=26, size_hint=(1, 1), md_bg_color=(0, 0.7, 0, 1), on_release=self.do_age)
         age_box.add_widget(self.age_button)
         root.add_widget(age_box)
 
         # STAT BARS (2 rows for more stats)
-        stats_row1 = MDBoxLayout(size_hint=(1, 0.08), spacing=5)
+        stats_row1 = MDBoxLayout(size_hint_y=0.08, spacing=dp(5))
         self.s_hap = StatBar("Hap", 100, (0,1,0,1))
         self.s_hlt = StatBar("Hlt", 100, (1,0,0,1))
         self.s_smrt = StatBar("Smrt", 100, (0,0,1,1))
@@ -393,17 +499,17 @@ class GameScreen(Screen):
         stats_row1.add_widget(self.s_smrt); stats_row1.add_widget(self.s_lok)
         root.add_widget(stats_row1)
         
-        stats_row2 = MDBoxLayout(size_hint=(1, 0.08), spacing=5)
-        self.s_karma = StatBar("Karma", 0, (0.5, 0, 0.5, 1)) # Purple
+        stats_row2 = MDBoxLayout(size_hint_y=0.08, spacing=dp(5))
+        self.s_karma = StatBar("Karma", 0, (0.5, 0, 0.5, 1), is_percent=False) # Purple
         self.s_stress = StatBar("Stress", 20, (0.8, 0.4, 0, 1)) # Orange
         self.s_energy = StatBar("Energy", 100, (0, 0.8, 0.8, 1)) # Cyan
-        self.s_fame = StatBar("Fame", 0, (1, 0.8, 0, 1)) # Gold
+        self.s_fame = StatBar("Fame", 0, (1, 0.8, 0, 1), is_percent=False) # Gold
         stats_row2.add_widget(self.s_karma); stats_row2.add_widget(self.s_stress)
         stats_row2.add_widget(self.s_energy); stats_row2.add_widget(self.s_fame)
         root.add_widget(stats_row2)
 
         # MENU TABS
-        nav = MDBoxLayout(size_hint=(1, 0.08), spacing=2)
+        nav = MDBoxLayout(size_hint_y=0.08, spacing=dp(2))
         nav.add_widget(MDRectangleFlatButton(text="JOB", size_hint=(0.25, 1), on_release=lambda x: self.menu("job")))
         nav.add_widget(MDRectangleFlatButton(text="ASSET", size_hint=(0.25, 1), on_release=lambda x: self.menu("asset")))
         nav.add_widget(MDRectangleFlatButton(text="RELATION", size_hint=(0.25, 1), on_release=lambda x: self.menu("rel")))
@@ -435,8 +541,10 @@ class GameScreen(Screen):
         self.s_karma.update(e.karma); self.s_stress.update(e.stress)
         self.s_energy.update(e.energy); self.s_fame.update(e.fame)
         
-        self.log_list.clear_widgets()
-        for txt in e.log_history[:50]: self.log_list.add_widget(OneLineListItem(text=txt))
+        # Update RecycleView data efficiently
+        self.log_rv.data = [{'text': txt} for txt in e.log_history[:50]]
+        # Scroll to top to show latest log entries
+        self.log_rv.scroll_y = 1 
 
         # NEURAL THEME ENGINE - More complex states
         if e.hlt < 30 or e.stress > 80: self.app.theme_cls.primary_palette = "Red"     # Critical Health/Stress
@@ -460,9 +568,6 @@ class GameScreen(Screen):
         if self.engine.scenario == "wallet":
             self.show_popup("Found Wallet", "You found a wallet with $500. What do you do?", [("Keep (Karma-)", self.scen_keep), ("Return (Karma+)", self.scen_ret)])
             self.engine.scenario = None
-        elif self.engine.game_over_reason and (self._current_dialog is None or not self._current_dialog.is_open):
-            # Game Over dialog should be handled by engine.dialog_queue now
-            pass
         
     def show_popup(self, title, text, opts):
         btns = []
@@ -481,7 +586,7 @@ class GameScreen(Screen):
         self.update() # Refresh after choice
 
     def scen_keep(self): 
-        self.engine.money+=500; self.engine.adjust_stat("hap", 10); self.engine.adjust_stat("karma", -10, min_val=-100); 
+        self.engine.money+=500; self.engine.adjust_stat("hap", 10); self.engine.adjust_stat("karma", -10, min_val=-100, allow_below_min=True); 
         self.engine.log("Kept wallet (Karma -10).", SPRITES['Money'])
     def scen_ret(self): 
         self.engine.adjust_stat("hap", 20); self.engine.adjust_stat("karma", 10, max_val=100); 
@@ -507,22 +612,28 @@ class MenuScreen(Screen):
 
     def build_ui(self):
         self.clear_widgets()
-        layout = MDBoxLayout(orientation='vertical', padding=15, spacing=10)
+        layout = MDBoxLayout(orientation='vertical', padding=dp(15), spacing=dp(10))
         layout.add_widget(MDLabel(text=self.name.upper(), font_style="H5", halign="center", size_hint_y=0.1))
         
         scroll = MDScrollView()
-        lst = MDList()
         
+        self.menu_rv = RecycleView(viewclass=SelectableTwoLineIconListItem)
+        self.menu_rv_layout = RecycleBoxLayout(default_size=(None, dp(64)), default_size_hint=(1, None),
+                                        orientation='vertical', size_hint_y=None, spacing=dp(2))
+        self.menu_rv.add_widget(self.menu_rv_layout)
+        scroll.add_widget(self.menu_rv)
+        
+        items_data = [] # List to hold dictionaries for RecycleView data
+
         # DYNAMIC CONTENT BUILDER
         if self.name == "job":
-            if self.engine.age < 16: lst.add_widget(OneLineListItem(text="Child Labor Laws Active."))
-            elif self.engine.current_education: lst.add_widget(OneLineListItem(text="Cannot take a job while studying full-time."))
+            if self.engine.age < 16: items_data.append({'text': "Child Labor Laws Active.", 'disabled': True, 'icon': SPRITES['Sad']})
+            elif self.engine.current_education: items_data.append({'text': "Cannot take a job while studying full-time.", 'disabled': True, 'icon': SPRITES['School']})
             else:
                 if self.engine.career != "Unemployed":
-                    lst.add_widget(OneLineListItem(text=f"Current: {self.engine.career}", disabled=True))
-                    lst.add_widget(MDFillRoundFlatButton(text="QUIT JOB", on_release=self.quit_job, size_hint_y=None, height="48dp", md_bg_color=(0.8,0,0,1)))
-                    lst.add_widget(OneLineListItem(text="--- Available Jobs ---", disabled=True))
-
+                    items_data.append({'text': f"Current: {self.engine.career}", 'secondary_text': "Click to Quit", 'icon': JOBS[self.engine.career]['icon'], 'callback': self.quit_job})
+                    items_data.append({'text': "--- Available Jobs ---", 'disabled': True})
+                
                 for t, d in JOBS.items():
                     can_apply = self.engine.age >= d['req_age'] and self.engine.smrt >= d['req_smrt']
                     for skill, level in d['req_skills'].items():
@@ -533,96 +644,151 @@ class MenuScreen(Screen):
                         req_skills_str = ", ".join([f"{s} Lv.{l}" for s, l in d['req_skills'].items()])
                         sec_text += f" | Skills: {req_skills_str}"
 
-                    if can_apply:
-                        lst.add_widget(TwoLineListItem(text=f"{d['icon']} {t}", secondary_text=sec_text, on_release=lambda x,t=t:self.get_job(t)))
-                    else:
-                        lst.add_widget(TwoLineListItem(text=f"{d['icon']} {t} [color=808080](Requirements not met)[/color]", secondary_text=sec_text, disabled=True))
+                    items_data.append({
+                        'text': t,
+                        'secondary_text': sec_text,
+                        'icon': d['icon'],
+                        'callback': (lambda t=t: self.get_job(t)) if can_apply else None,
+                        'disabled': not can_apply
+                    })
         
         elif self.name == "asset":
-            if self.engine.age < 18: lst.add_widget(OneLineListItem(text="Must be 18+ to buy assets."))
+            if self.engine.age < 18: items_data.append({'text': "Must be 18+ to buy assets.", 'disabled': True, 'icon': SPRITES['Sad']})
             else:
-                lst.add_widget(OneLineListItem(text="--- Your Assets ---", disabled=True))
-                if not self.engine.assets: lst.add_widget(OneLineListItem(text="No assets owned."))
+                items_data.append({'text': "--- Your Assets ---", 'disabled': True})
+                if not self.engine.assets: items_data.append({'text': "No assets owned.", 'disabled': True})
                 for i, a in enumerate(self.engine.assets):
-                    asset_info = f"{SPRITES[a['type']]} {a['name']} (Value: ${a['val']:,})"
+                    asset_info = f"{a['name']} (Value: ${a['val']:,})"
                     upkeep_cost = a['props'].get('upkeep', 0)
                     if upkeep_cost > 0: asset_info += f" | Upkeep: ${upkeep_cost:,}/yr"
-                    lst.add_widget(TwoLineListItem(text=asset_info, secondary_text="Click to Sell", on_release=lambda x, idx=i: self.sell_asset_dialog(idx)))
+                    items_data.append({
+                        'text': asset_info,
+                        'secondary_text': "Click to Sell",
+                        'icon': SPRITES[a['type']],
+                        'callback': lambda idx=i: self.sell_asset_dialog(idx)
+                    })
                 
-                lst.add_widget(OneLineListItem(text="--- Available to Buy ---", disabled=True))
+                items_data.append({'text': "--- Available to Buy ---", 'disabled': True})
                 for n, p, t, props in ASSETS:
-                    lst.add_widget(TwoLineListItem(text=f"{SPRITES[t]} {n}", secondary_text=f"Cost: ${p:,} | Upkeep: ${props.get('upkeep', 0):,}/yr", on_release=lambda x,n=n,p=p,t=t,props=props:self.buy_asset(n,p,t,props)))
+                    can_buy = self.engine.money >= p
+                    items_data.append({
+                        'text': n,
+                        'secondary_text': f"Cost: ${p:,} | Upkeep: ${props.get('upkeep', 0):,}/yr",
+                        'icon': SPRITES[t],
+                        'callback': (lambda n=n,p=p,t=t,props=props:self.buy_asset(n,p,t,props)) if can_buy else None,
+                        'disabled': not can_buy
+                    })
         
         elif self.name == "act":
-            lst.add_widget(OneLineListItem(text="--- Health & Mind ---", disabled=True))
-            opts = [("🏥 Visit Doctor ($100)", self.doc), ("🏋️ Go to Gym ($50)", self.gym), ("🧘 Meditate (Free)", self.meditate), ("🧠 Study (Improve Smrt/Skills, $200)", self.study)]
-            for t, f in opts: lst.add_widget(OneLineListItem(text=t, on_release=f))
+            items_data.append({'text': "--- Health & Mind ---", 'disabled': True})
+            opts = [("🏥 Visit Doctor", self.doc, SPRITES['Doc'], 100), ("🏋️ Go to Gym", self.gym, SPRITES['Gym'], 50), ("🧘 Meditate", self.meditate, SPRITES['Meditate'], 0), ("🧠 Study", self.study, SPRITES['Study'], 200)]
+            for t, f, icon, cost in opts:
+                can_afford = self.engine.money >= cost
+                items_data.append({
+                    'text': t,
+                    'secondary_text': f"(Cost: ${cost:,})" if cost > 0 else "(Free)",
+                    'icon': icon,
+                    'callback': f if can_afford else None,
+                    'disabled': not can_afford
+                })
             
-            lst.add_widget(OneLineListItem(text="--- Education ---", disabled=True))
+            items_data.append({'text': "--- Education ---", 'disabled': True})
             for program_name, data in EDUCATION_PROGRAMS.items():
                 if program_name == self.engine.education:
-                     lst.add_widget(OneLineListItem(text=f"{SPRITES['Degree']} {program_name} (Completed)", disabled=True))
+                     items_data.append({'text': f"Completed: {program_name}", 'icon': SPRITES['Degree'], 'disabled': True})
                      continue
                 if self.engine.current_education and self.engine.current_education['degree'] == data.get('degree'):
-                    lst.add_widget(OneLineListItem(text=f"{SPRITES['Degree']} Currently enrolled in {program_name} ({self.engine.education_years_left} yrs left)", disabled=True))
+                    items_data.append({'text': f"Enrolled: {program_name} ({self.engine.education_years_left} yrs left)", 'icon': SPRITES['Degree'], 'disabled': True})
                     continue
 
                 can_enroll = self.engine.age >= data['min_age'] and self.engine.money >= data['cost']
                 if data.get('req_smrt', 0) > self.engine.smrt: can_enroll = False
 
-                if can_enroll:
-                    lst.add_widget(TwoLineListItem(text=f"{SPRITES['School']} {program_name}", secondary_text=f"Cost: ${data['cost']:,} | Duration: {data['duration']} yrs", on_release=lambda x, p=program_name, d=data: self.enroll_education(p, d)))
-                else:
-                    sec_text = f"Cost: ${data['cost']:,} | Duration: {data['duration']} yrs"
-                    if data.get('req_smrt', 0) > self.engine.smrt: sec_text += f" (Req. Smrt: {data['req_smrt']})"
-                    lst.add_widget(TwoLineListItem(text=f"{SPRITES['School']} {program_name} [color=808080](Cannot Enroll)[/color]", secondary_text=sec_text, disabled=True))
+                sec_text = f"Cost: ${data['cost']:,} | Duration: {data['duration']} yrs"
+                if data.get('req_smrt', 0) > self.engine.smrt: sec_text += f" (Req. Smrt: {data['req_smrt']})"
+                
+                items_data.append({
+                    'text': program_name,
+                    'secondary_text': sec_text,
+                    'icon': SPRITES['School'],
+                    'callback': (lambda p=program_name, d=data: self.enroll_education(p, d)) if can_enroll else None,
+                    'disabled': not can_enroll
+                })
 
+            items_data.append({'text': "--- Social & Entertainment ---", 'disabled': True})
+            opts = [("🎰 Go to Casino", self.casino, SPRITES['Casino'], 100), ("✈️ Travel", self.travel, SPRITES['Travel'], 1000), ("🧑‍🤝‍🧑 Volunteer", self.volunteer, SPRITES['Volunteer'], 0), ("❤️ Dating App", self.date, SPRITES['Love'], 0)]
+            for t, f, icon, cost in opts:
+                can_afford = self.engine.money >= cost
+                items_data.append({
+                    'text': t,
+                    'secondary_text': f"(Cost: ${cost:,})" if cost > 0 else "(Free)",
+                    'icon': icon,
+                    'callback': f if can_afford else None,
+                    'disabled': not can_afford
+                })
 
-            lst.add_widget(OneLineListItem(text="--- Social & Entertainment ---", disabled=True))
-            opts = [("🎰 Go to Casino ($100)", self.casino), ("✈️ Travel (Varies)", self.travel), ("🧑‍🤝‍🧑 Volunteer (Free)", self.volunteer), ("❤️ Dating App", self.date)]
-            for t, f in opts: lst.add_widget(OneLineListItem(text=t, on_release=f))
-
-            lst.add_widget(OneLineListItem(text="--- Illegal ---", disabled=True))
-            opts = [("🔫 Commit Crime", self.crime)]
-            for t, f in opts: lst.add_widget(OneLineListItem(text=t, on_release=f))
+            items_data.append({'text': "--- Illegal ---", 'disabled': True})
+            opts = [("🔫 Commit Crime", self.crime, SPRITES['Crime'], 0)]
+            for t, f, icon, cost in opts:
+                can_afford = self.engine.money >= cost # Crime doesn't usually cost money directly
+                items_data.append({
+                    'text': t,
+                    'secondary_text': "(High Risk!)",
+                    'icon': icon,
+                    'callback': f if can_afford else None,
+                    'disabled': not can_afford
+                })
             
         elif self.name == "rel":
-            lst.add_widget(OneLineListItem(text="--- Family & Friends ---", disabled=True))
+            items_data.append({'text': "--- Family & Friends ---", 'disabled': True})
             for r in self.engine.relations:
                 action_text = ""
-                if r['type'] == 'Spouse':
-                    action_text = " (Married)"
-                elif r['type'] == 'Partner':
-                    action_text = " (Partner)"
+                if r['type'] == 'Spouse': action_text = " (Married)"
+                elif r['type'] == 'Partner': action_text = " (Partner)"
                     
-                lst.add_widget(TwoLineListItem(text=f"{r['name']} ({r['type']})", secondary_text=f"Relationship: {r['rel']}% {action_text}", on_release=lambda x, rel_obj=r: self.interact_relation(rel_obj)))
+                items_data.append({
+                    'text': f"{r['name']} ({r['type']})",
+                    'secondary_text': f"Relationship: {r['rel']}% {action_text}",
+                    'icon': SPRITES['Love'],
+                    'callback': lambda rel_obj=r: self.interact_relation(rel_obj)
+                })
             
             if self.engine.married_to:
-                lst.add_widget(MDFillRoundFlatButton(text="HAVE A CHILD", on_release=self.have_child, size_hint_y=None, height="48dp", md_bg_color=(0,0.7,0,1)))
+                items_data.append({
+                    'text': "HAVE A CHILD",
+                    'secondary_text': "Expand your family!",
+                    'icon': SPRITES['Baby'],
+                    'callback': self.have_child
+                })
             
-            lst.add_widget(OneLineListItem(text="--- Your Children ---", disabled=True))
-            if not self.engine.children: lst.add_widget(OneLineListItem(text="No children yet."))
+            items_data.append({'text': "--- Your Children ---", 'disabled': True})
+            if not self.engine.children: items_data.append({'text': "No children yet.", 'disabled': True})
             for child in self.engine.children:
-                lst.add_widget(OneLineListItem(text=f"{SPRITES['Child']} {child['name']} (Age: {child['age']})"))
+                items_data.append({'text': f"{child['name']} (Age: {child['age']})", 'icon': SPRITES['Child'], 'disabled': True})
 
-            lst.add_widget(OneLineListItem(text="--- Your Skills ---", disabled=True))
-            if not self.engine.skills: lst.add_widget(OneLineListItem(text="No skills acquired yet."))
+            items_data.append({'text': "--- Your Skills ---", 'disabled': True})
+            if not self.engine.skills: items_data.append({'text': "No skills acquired yet.", 'disabled': True})
             for skill, level in self.engine.skills.items():
-                lst.add_widget(OneLineListItem(text=f"{SPRITES['Skill']} {skill} (Level: {level})"))
-            lst.add_widget(OneLineListItem(text="--- Learn New Skills ---", disabled=True))
+                items_data.append({'text': f"{skill} (Level: {level})", 'icon': SPRITES['Skill'], 'disabled': True})
+            
+            items_data.append({'text': "--- Learn New Skills ---", 'disabled': True})
             for skill_name, data in SKILLS_LEARN.items():
                 current_level = self.engine.get_skill_level(skill_name)
                 req_smrt = data.get('smrt_req', 0)
                 can_learn = self.engine.money >= data['cost'] and self.engine.smrt >= req_smrt
                 
                 sec_text = f"Cost: ${data['cost']:,} | Smrt Req: {req_smrt} | Current Lv: {current_level}"
-                if can_learn:
-                    lst.add_widget(TwoLineListItem(text=f"{SPRITES['Skill']} Learn {skill_name}", secondary_text=sec_text, on_release=lambda x, s_name=skill_name, s_data=data: self.learn_skill(s_name, s_data)))
-                else:
-                    lst.add_widget(TwoLineListItem(text=f"{SPRITES['Skill']} Learn {skill_name} [color=808080](Requirements not met)[/color]", secondary_text=sec_text, disabled=True))
-
-        scroll.add_widget(lst); layout.add_widget(scroll)
-        layout.add_widget(MDFillRoundFlatButton(text="BACK", size_hint=(1, 0.08), on_release=self.back))
+                items_data.append({
+                    'text': f"Learn {skill_name}",
+                    'secondary_text': sec_text,
+                    'icon': SPRITES['Skill'],
+                    'callback': (lambda s_name=skill_name, s_data=data: self.learn_skill(s_name, s_data)) if can_learn else None,
+                    'disabled': not can_learn
+                })
+        
+        self.menu_rv.data = items_data
+        layout.add_widget(scroll)
+        layout.add_widget(MDFillRoundFlatButton(text="BACK", size_hint_y=0.08, on_release=self.back))
         self.add_widget(layout)
 
     # ACTIONS
@@ -731,7 +897,8 @@ class MenuScreen(Screen):
 
     def enroll_education(self, program_name, data):
         if self.engine.money >= data['cost']:
-            self.engine.money -= data['cost'] # Initial cost deduction
+            # For simplicity, full cost is deducted initially, yearly deduction will then occur
+            self.engine.money -= data['cost'] 
             self.engine.current_education = data
             self.engine.education_years_left = data['duration']
             self.engine.log(f"Enrolled in {program_name}! Costs spread over {data['duration']} years.", SPRITES['Degree'])
@@ -748,7 +915,7 @@ class MenuScreen(Screen):
             self.engine.adjust_stat("smrt", data['effect'].get("smrt", 0))
             self.engine.adjust_stat("hap", data['effect'].get("hap", 0))
             self.engine.adjust_stat("hlt", data['effect'].get("hlt", 0))
-            self.engine.adjust_stat("fame", data['effect'].get("fame", 0))
+            self.engine.adjust_stat("fame", data['effect'].get("fame", 0), allow_below_min=True)
             self.engine.log(f"Improved {skill_name} skill to Level {self.engine.skills[skill_name]}!", SPRITES['Skill'])
             self.engine.buzz(0.08)
         else:
@@ -761,16 +928,16 @@ class MenuScreen(Screen):
         if random.random() > 0.6: # 40% chance of success
             loot = random.randint(500, 5000)
             self.engine.money += loot
-            self.engine.adjust_stat("karma", -random.randint(5, 15), min_val=-100)
+            self.engine.adjust_stat("karma", -random.randint(5, 15), min_val=-100, allow_below_min=True)
             self.engine.adjust_stat("hap", 5)
             self.engine.log(f"Successfully committed crime, gained ${loot:,}!", SPRITES['Money'])
             self.engine.buzz(0.1)
         else: 
             jail_time = random.randint(2, 5)
             self.engine.jail = jail_time
-            self.engine.adjust_stat("karma", -random.randint(10, 25), min_val=-100)
+            self.engine.adjust_stat("karma", -random.randint(10, 25), min_val=-100, allow_below_min=True)
             self.engine.adjust_stat("hap", -20)
-            self.engine.adjust_stat("fame", -10)
+            self.engine.adjust_stat("fame", -10, min_val=-100, allow_below_min=True)
             self.engine.log(f"ARRESTED! Serving {jail_time} years.", SPRITES['Jail'])
             self.engine.buzz(0.5) # Longer vibration for negative event
         self.back()
@@ -796,7 +963,7 @@ class MenuScreen(Screen):
             self.engine.money -= 1000
             self.engine.adjust_stat("hap", 20)
             self.engine.adjust_stat("stress", -20)
-            self.engine.adjust_stat("fame", random.randint(0, 5))
+            self.engine.adjust_stat("fame", random.randint(0, 5), allow_below_min=True)
             self.engine.log("Traveled to an exotic location! Feeling rejuvenated.", SPRITES['Travel'])
             self.engine.buzz(0.08)
         else: self.engine.log("Need $1000 to travel.", SPRITES['Sad'])
@@ -847,7 +1014,7 @@ class MenuScreen(Screen):
                 self.engine.married_to = rel_obj['name']
                 rel_obj['type'] = 'Spouse' # Update type in relations list
                 self.engine.log(f"You married {rel_obj['name']}! Congratulations!", SPRITES['Marriage'])
-                self.engine.adjust_stat("hap", 30); self.engine.adjust_stat("fame", 10)
+                self.engine.adjust_stat("hap", 30); self.engine.adjust_stat("fame", 10, allow_below_min=True)
             else:
                 self.engine.log(f"{rel_obj['name']} rejected your proposal. Relationship declined.", SPRITES['Sad'])
                 rel_obj['rel'] = max(0, rel_obj['rel'] - 20)
