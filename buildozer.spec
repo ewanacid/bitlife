@@ -1,15 +1,14 @@
 [app]
-title = BitLife Phoenix
-package.name = bitlifegen3
+title = BitLife Bedrock
+package.name = bitlifebedrock
 package.domain = org.nfg
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ttf
-version = 3.5
-# CRITICAL: kivymd and pillow are required for the UI to render
+version = 4.0
 requirements = python3,kivy==2.2.0,kivymd,pillow,android
 orientation = portrait
 fullscreen = 0
-android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE
+android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
 android.api = 33
 android.minapi = 21
 android.archs = arm64-v8a
