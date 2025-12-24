@@ -9,29 +9,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # --- CRITICAL FIX: FREE DISK SPACE ---
+      - name: Free Disk Space
+        run: |
+          echo "Listing space before cleanup..."
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          echo "Space after cleanup:"
+          df -h
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      # --- TURBO CACHE MODULE ---
-      # Caches the heavy Android SDK/NDK so we don't download it every run.
+      # CHANGED CACHE KEY TO 'v2' TO FORCE FRESH START
       - name: Cache Buildozer Global
         uses: actions/cache@v3
         with:
           path: ~/.buildozer
-          key: buildozer-global-${{ hashFiles('buildozer.spec') }}
-          restore-keys: |
-            buildozer-global-
-
-      - name: Cache Buildozer Local
-        uses: actions/cache@v3
-        with:
-          path: .buildozer
-          key: buildozer-local-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-          restore-keys: |
-            buildozer-local-${{ runner.os }}-
+          key: buildozer-global-v2-${{ hashFiles('buildozer.spec') }}
 
       - name: Install Dependencies
         run: |
@@ -49,5 +50,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: BitLife-APK
+          name: BitLife-Cosmic-APK
           path: bin/*.apk

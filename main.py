@@ -5,7 +5,7 @@ from kivy.uix.screenmanager import ScreenManager, Screen, NoTransition
 from kivymd.app import MDApp
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.label import MDLabel
-from kivymd.uix.button import MDFillRoundFlatButton, MDRectangleFlatButton, MDIconButton
+from kivymd.uix.button import MDFillRoundFlatButton, MDRectangleFlatButton
 from kivymd.uix.list import MDList, TwoLineListItem, OneLineListItem
 from kivymd.uix.scrollview import MDScrollView
 from kivymd.uix.progressbar import MDProgressBar
@@ -41,7 +41,6 @@ class SimEngine:
         self.money = 0
         self.career = "Unemployed"
         self.education = "None"
-        # The Big 4
         self.hap = 90
         self.hlt = 100
         self.smrt = random.randint(20, 90)
@@ -49,7 +48,7 @@ class SimEngine:
         
         self.alive = True
         self.jail = 0
-        self.assets = [] # {name, type, val}
+        self.assets = []
         self.relations = [{"name": "Mom", "rel": 100}, {"name": "Dad", "rel": 100}]
         self.log_history = [f"{SPRITES['Baby']} Born a {self.gender} in the Matrix."]
         self.scenario = None
@@ -61,7 +60,6 @@ class SimEngine:
         if not self.alive: return
         self.age += 1
         
-        # 1. JAIL
         if self.jail > 0:
             self.jail -= 1
             self.hap -= 10
@@ -69,27 +67,20 @@ class SimEngine:
             if self.jail == 0: self.log("Released from prison!", "🔓")
             return
 
-        # 2. CAREER & SCHOOL
         if self.age < 18:
             self.education = "High School"
             self.smrt += random.randint(0, 5)
         elif self.career != "Unemployed":
             sal = JOBS.get(self.career, {'sal':0})['sal']
-            tax = int(sal * 0.2)
-            self.money += (sal - tax)
-            # Raise Logic
-            if random.random() < 0.1:
-                self.log(f"Got a raise! (+10%)", SPRITES['Money'])
+            self.money += int(sal * 0.8) # After tax
+            if random.random() < 0.1: self.log(f"Got a raise!", SPRITES['Money'])
         
-        # 3. ASSETS
         for a in self.assets:
-            if a['type'] == 'House': a['val'] = int(a['val']*1.03) # Appreciate
-            if a['type'] == 'Car': a['val'] = int(a['val']*0.90)   # Depreciate
+            if a['type'] == 'House': a['val'] = int(a['val']*1.03) 
+            if a['type'] == 'Car': a['val'] = int(a['val']*0.90)
 
-        # 4. RANDOM EVENTS
         self.run_events()
 
-        # 5. DEATH
         if self.hlt <= 0 or (self.age > 85 and random.random() < 0.2):
             self.alive = False
             self.face = SPRITES['Dead']
@@ -105,7 +96,7 @@ class SimEngine:
             prize = random.randint(50, 500)
             self.money += prize; self.log(f"Found ${prize} on the street.", SPRITES['Money'])
         elif roll < 0.20:
-            self.scenario = "wallet" # Trigger popup
+            self.scenario = "wallet"
 
     def get_net_worth(self):
         return self.money + sum(a['val'] for a in self.assets)
@@ -114,15 +105,13 @@ class SimEngine:
 class StatBar(MDBoxLayout):
     def __init__(self, label, value, color, **kwargs):
         super().__init__(orientation='vertical', size_hint_x=0.25, **kwargs)
-        self.lbl = MDLabel(text=f"{label}: {value}%", halign="center", font_style="Caption", theme_text_color="Custom", text_color=color)
-        self.add_widget(self.lbl)
+        self.add_widget(MDLabel(text=f"{label}: {value}%", halign="center", font_style="Caption", theme_text_color="Custom", text_color=color))
         self.bar = MDProgressBar(value=value, color=color, size_hint_y=None, height="6dp")
         self.add_widget(self.bar)
     def update(self, val):
-        self.lbl.text = f"{self.lbl.text.split(':')[0]}: {val}%"
+        self.children[1].text = f"{self.children[1].text.split(':')[0]}: {val}%"
         self.bar.value = val
 
-# --- MAIN SCREEN ---
 class GameScreen(Screen):
     def on_enter(self):
         self.app = MDApp.get_running_app()
@@ -133,7 +122,6 @@ class GameScreen(Screen):
         self.clear_widgets()
         root = MDBoxLayout(orientation='vertical', padding=10, spacing=5)
 
-        # 1. HEADER (Identity)
         head = MDBoxLayout(orientation='horizontal', size_hint=(1, 0.15))
         self.lbl_face = MDLabel(text=self.engine.face, font_style="H2", size_hint_x=0.2, halign="center")
         info = MDBoxLayout(orientation='vertical')
@@ -144,22 +132,16 @@ class GameScreen(Screen):
         head.add_widget(self.lbl_face); head.add_widget(info)
         root.add_widget(head)
 
-        # 2. LOG
         scroll = MDScrollView(size_hint=(1, 0.45))
         self.log_list = MDList()
         scroll.add_widget(self.log_list)
         root.add_widget(scroll)
 
-        # 3. AGE BUTTON
         age_box = MDBoxLayout(padding=[30, 5], size_hint=(1, 0.12))
-        btn = MDFillRoundFlatButton(
-            text="AGE UP +", font_size=26, size_hint=(1, 1),
-            md_bg_color=(0, 0.7, 0, 1), on_release=self.do_age
-        )
+        btn = MDFillRoundFlatButton(text="AGE UP +", font_size=26, size_hint=(1, 1), md_bg_color=(0, 0.7, 0, 1), on_release=self.do_age)
         age_box.add_widget(btn)
         root.add_widget(age_box)
 
-        # 4. STAT BARS
         stats = MDBoxLayout(size_hint=(1, 0.1), spacing=5)
         self.s_hap = StatBar("Hap", 100, (0,1,0,1))
         self.s_hlt = StatBar("Hlt", 100, (1,0,0,1))
@@ -169,7 +151,6 @@ class GameScreen(Screen):
         stats.add_widget(self.s_smr); stats.add_widget(self.s_lok)
         root.add_widget(stats)
 
-        # 5. NAVIGATION
         nav = MDBoxLayout(size_hint=(1, 0.1), spacing=2)
         nav.add_widget(MDRectangleFlatButton(text="OCCUPATION", size_hint=(0.25, 1), on_release=lambda x: self.menu("job")))
         nav.add_widget(MDRectangleFlatButton(text="ASSETS", size_hint=(0.25, 1), on_release=lambda x: self.menu("asset")))
@@ -186,20 +167,16 @@ class GameScreen(Screen):
         self.lbl_name.text = f"{e.name} ({e.age})"
         self.lbl_job.text = f"{e.career} | {e.education}"
         self.lbl_bank.text = f"Bank: ${e.money:,}"
-        
         self.s_hap.update(e.hap); self.s_hlt.update(e.hlt)
         self.s_smr.update(e.smrt); self.s_lok.update(e.look)
-        
         self.log_list.clear_widgets()
-        for txt in e.log_history[:40]:
-            self.log_list.add_widget(OneLineListItem(text=txt))
+        for txt in e.log_history[:40]: self.log_list.add_widget(OneLineListItem(text=txt))
 
     def do_age(self, *x):
         self.engine.age_up()
         self.update()
         if self.engine.scenario == "wallet":
-            self.show_popup("Found Wallet", "You found a wallet with $500.", 
-                [("Keep", self.scen_keep), ("Return", self.scen_ret)])
+            self.show_popup("Found Wallet", "You found a wallet with $500.", [("Keep", self.scen_keep), ("Return", self.scen_ret)])
             self.engine.scenario = None
 
     def show_popup(self, title, text, opts):
@@ -216,82 +193,54 @@ class GameScreen(Screen):
     def scen_ret(self): self.engine.hap+=20; self.engine.log("Returned wallet.", SPRITES['Happy'])
     def menu(self, m): self.manager.current = m
 
-# --- MENU SYSTEM ---
 class MenuScreen(Screen):
     def __init__(self, name, **kwargs):
         super().__init__(name=name, **kwargs)
-    
     def on_enter(self):
         self.app = MDApp.get_running_app()
         self.engine = self.app.engine
         self.build_ui()
-
+    def back(self, *x): self.manager.current = 'game'
     def build_ui(self):
         self.clear_widgets()
         layout = MDBoxLayout(orientation='vertical', padding=15)
         layout.add_widget(MDLabel(text=self.name.upper(), font_style="H5", halign="center", size_hint=(1, 0.1)))
-        
         scroll = MDScrollView()
         lst = MDList()
         
-        # DYNAMIC CONTENT
         if self.name == "job":
             if self.engine.age < 16: lst.add_widget(OneLineListItem(text="Child Labor Laws Active."))
             else:
                 for t, d in JOBS.items():
                     lst.add_widget(TwoLineListItem(text=f"{d['icon']} {t}", secondary_text=f"${d['sal']:,}/yr (Req Age: {d['req']})", on_release=lambda x,t=t:self.get_job(t)))
-
         elif self.name == "asset":
             if self.engine.age < 18: lst.add_widget(OneLineListItem(text="Must be 18 to buy assets."))
             else:
                 assets = [("Used Car", 5000, "Car"), ("New Sedan", 25000, "Car"), ("Small House", 120000, "House"), ("Mansion", 2000000, "House")]
                 for n, p, t in assets:
                     lst.add_widget(TwoLineListItem(text=f"{SPRITES[t]} {n}", secondary_text=f"${p:,}", on_release=lambda x,n=n,p=p,t=t:self.buy(n,p,t)))
-
         elif self.name == "act":
-            opts = [
-                ("🏥 Doctor ($100)", self.doc), 
-                ("🏋️ Gym ($50)", self.gym), 
-                ("🎰 Casino", self.casino), 
-                ("🔫 Crime", self.crime),
-                ("❤️ Dating App", self.date)
-            ]
+            opts = [("🏥 Doctor ($100)", self.doc), ("🏋️ Gym ($50)", self.gym), ("🎰 Casino", self.casino), ("🔫 Crime", self.crime), ("❤️ Dating App", self.date)]
             for t, f in opts: lst.add_widget(OneLineListItem(text=t, on_release=f))
-
         elif self.name == "rel":
-            for r in self.engine.relations:
-                lst.add_widget(TwoLineListItem(text=r['name'], secondary_text=f"Relationship: {r['rel']}%"))
+            for r in self.engine.relations: lst.add_widget(TwoLineListItem(text=r['name'], secondary_text=f"Relationship: {r['rel']}%"))
 
-        scroll.add_widget(lst)
-        layout.add_widget(scroll)
+        scroll.add_widget(lst); layout.add_widget(scroll)
         layout.add_widget(MDFillRoundFlatButton(text="BACK", size_hint=(1, 0.1), on_release=self.back))
         self.add_widget(layout)
 
-    def back(self, *x): self.manager.current = 'game'
-    
     def get_job(self, t):
-        if self.engine.age >= JOBS[t]['req']:
-            self.engine.career = t
-            self.engine.log(f"HIRED as {t}!", JOBS[t]['icon'])
-        else:
-            self.engine.log(f"Rejected from {t}.", SPRITES['Sad'])
+        if self.engine.age >= JOBS[t]['req']: self.engine.career = t; self.engine.log(f"HIRED as {t}!", JOBS[t]['icon'])
+        else: self.engine.log(f"Rejected from {t}.", SPRITES['Sad'])
         self.back()
-
     def buy(self, n, p, t):
-        if self.engine.money >= p:
-            self.engine.money -= p
-            self.engine.assets.append({"name": n, "val": p, "type": t})
-            self.engine.log(f"Bought {n}!", SPRITES[t])
-        else:
-            self.engine.log("Too poor.", SPRITES['Sad'])
+        if self.engine.money >= p: self.engine.money -= p; self.engine.assets.append({"name": n, "val": p, "type": t}); self.engine.log(f"Bought {n}!", SPRITES[t])
+        else: self.engine.log("Too poor.", SPRITES['Sad'])
         self.back()
-
     def doc(self, *x): 
-        if self.engine.money>=100: self.engine.money-=100; self.engine.hlt=100; self.engine.log("Cured!", "🏥")
-        self.back()
+        if self.engine.money>=100: self.engine.money-=100; self.engine.hlt=100; self.engine.log("Cured!", "🏥"); self.back()
     def gym(self, *x):
-        if self.engine.money>=50: self.engine.money-=50; self.engine.hlt+=5; self.engine.look+=2; self.engine.log("Worked out.", "🏋️")
-        self.back()
+        if self.engine.money>=50: self.engine.money-=50; self.engine.hlt+=5; self.engine.log("Worked out.", "🏋️"); self.back()
     def crime(self, *x):
         if random.random()>0.5: self.engine.money+=1000; self.engine.log("Stole loot!", "💰")
         else: self.engine.jail=3; self.engine.log("ARRESTED! (3 yrs)", "🔒")
@@ -303,25 +252,19 @@ class MenuScreen(Screen):
             else: self.engine.log("Lost $100.", "💸")
         self.back()
     def date(self, *x):
-        n = random.choice(["Ashley","Jessica","Mike","Chris"])
-        self.engine.relations.append({"name": n, "rel": 50})
-        self.engine.log(f"Started dating {n}!", "❤️")
-        self.back()
+        n = random.choice(["Ashley","Jessica","Mike","Chris"]); self.engine.relations.append({"name": n, "rel": 50}); self.engine.log(f"Started dating {n}!", "❤️"); self.back()
 
 class CosmicApp(MDApp):
     def build(self):
         self.theme_cls.theme_style = "Dark"
-        self.theme_cls.primary_palette = "DeepPurple" # BitLife Color
+        self.theme_cls.primary_palette = "DeepPurple"
         self.engine = SimEngine()
-        
         sm = ScreenManager(transition=NoTransition())
         sm.add_widget(GameScreen(name='game'))
-        for m in ['job', 'asset', 'act', 'rel']:
-            sm.add_widget(MenuScreen(name=m, menu_name=m))
+        for m in ['job', 'asset', 'act', 'rel']: sm.add_widget(MenuScreen(name=m, menu_name=m))
         return sm
 
 if __name__ == "__main__":
-    try:
-        CosmicApp().run()
+    try: CosmicApp().run()
     except Exception as e:
         with open("crash.txt", "w") as f: f.write(traceback.format_exc())
