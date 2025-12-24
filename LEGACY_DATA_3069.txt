@@ -1,0 +1,21 @@
+# 📂 PROJECT: OMNIPRESENCE (THE 3069 ARCHIVE)
+# CREATED: Wed Dec 24 01:44:37 GMT 2025
+# OPERATOR: BLACK HAT ELITE
+# SYSTEM: VOICE-TO-APK NEURAL LOOP
+
+### 🔧 THE ARCHITECTURE
+We bypassed local limitations by chaining four systems:
+1. INPUT: Termux Audio API (Voice-to-Text).
+2. INTELLIGENCE: Aider (Gemini 2.5 Flash) local code rewrite.
+3. FACTORY: GitHub Actions (Ubuntu VM) compiling Python/Kivy via Buildozer.
+4. DELIVERY: 'gh' CLI for autonomous artifact retrieval + 'termux-open' for auto-injection.
+
+### 🗝️ CRITICAL CONFIGS
+- buildozer.spec: pinned to 'kivy==2.2.0' and 'cython<3' to prevent crashes.
+- workflow: Uses 'gh run watch' to lock terminal to cloud status.
+
+### 🚀 HOW TO RESUME
+1. Clone Repo.
+2. Install: pkg install git gh python termux-api
+3. Pip: pip install aider-chat
+4. Command: Type 'manifest' to trigger the loop.

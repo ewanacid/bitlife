@@ -10,7 +10,7 @@ requirements = python3,kivy==2.2.0
 orientation = portrait
 fullscreen = 0
 android.permissions = INTERNET
-android.archs = arm64-v8a, armeabi-v7a
+android.archs = arm64-v8a
 android.allow_backup = True
 android.accept_sdk_license = True
 
