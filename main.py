@@ -1,123 +1,215 @@
-import sys, traceback
+from kivymd.app import MDApp
+from kivymd.uix.screen import MDScreen
+from kivymd.uix.screenmanager import MDScreenManager
+from kivymd.uix.button import MDFillRoundFlatButton, MDRectangleFlatButton
+from kivymd.uix.label import MDLabel
+from kivymd.uix.boxlayout import MDBoxLayout
+from kivymd.uix.scrollview import MDScrollView
+from kivymd.uix.list import MDList, OneLineListItem, TwoLineListItem
+from kivymd.uix.card import MDCard
+from kivymd.uix.dialog import MDDialog
+import random
 
-# --- CRASH HANDLER (THE LAZARUS SHIELD) ---
-# If Kivy fails to load, this block catches it.
-try:
-    from kivymd.app import MDApp
-    from kivymd.uix.screen import MDScreen
-    from kivymd.uix.button import MDFillRoundFlatButton
-    from kivymd.uix.label import MDLabel
-    from kivymd.uix.boxlayout import MDBoxLayout
-    from kivymd.uix.scrollview import MDScrollView
-    from kivymd.uix.list import MDList, OneLineListItem
-    import random
-except Exception as e:
-    # FALLBACK: If imports fail, run a raw Kivy error screen
-    from kivy.app import App
-    from kivy.uix.label import Label
-    class ErrorApp(App):
-        def build(self):
-            return Label(text=f"CRITICAL IMPORT ERROR:\n{e}\n\nCheck buildozer.spec requirements!", color=(1,0,0,1))
-    ErrorApp().run()
-    sys.exit(1)
-
-# --- GAME LOGIC ---
-class GameScreen(MDScreen):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+# --- GAME ENGINE ---
+class LifeEngine:
+    def __init__(self):
         self.age = 0
         self.money = 0
         self.happiness = 100
         self.health = 100
-        self.log_history = []
+        self.job = "Unemployed"
+        self.salary = 0
+        self.assets = []
+        self.alive = True
+
+    def age_up(self):
+        self.age += 1
+        self.money += self.salary
+        
+        # Age-based events
+        event = ""
+        if self.age < 5:
+            event = random.choice(["Learned to walk.", "Said first word.", "Cried all night.", "Ate dirt."])
+        elif self.age < 18:
+            event = random.choice(["Got an A in math.", "Bullied at school.", "First kiss!", "Skipped class."])
+        elif self.age > 60:
+            self.health -= random.randint(5, 15)
+            event = random.choice(["Back pain started.", "Retired from bingo.", "Forgot where keys are.", "Grandkids visited."])
+        else:
+            # Adult events
+            if self.job == "Unemployed":
+                event = random.choice(["Looked for work.", "Watched TV all day.", "Went to the park."])
+            else:
+                event = random.choice([f"Worked hard as a {self.job}.", "Boss yelled at you.", "Got a small raise!", "Boring day at work."])
+
+        # Random Chaos
+        if random.random() < 0.1:
+            chaos = random.choice([("Won the lottery!", 5000), ("Got robbed!", -500), ("Found $20", 20)])
+            event += f" AND {chaos[0]}"
+            self.money += chaos[1]
+
+        return event
+
+# --- UI SCREENS ---
+class MenuScreen(MDScreen):
+    def build_ui(self):
+        layout = MDBoxLayout(orientation='vertical', padding=40, spacing=20, pos_hint={'center_x': 0.5, 'center_y': 0.5})
+        
+        title = MDLabel(text="BITLIFE ELITE", halign="center", font_style="H3", theme_text_color="Primary")
+        layout.add_widget(title)
+        
+        btn = MDFillRoundFlatButton(
+            text="START NEW LIFE",
+            font_size=24,
+            pos_hint={'center_x': 0.5},
+            on_release=self.start_game
+        )
+        layout.add_widget(btn)
+        self.add_widget(layout)
+
+    def start_game(self, instance):
+        self.manager.current = 'game'
+
+class GameScreen(MDScreen):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.engine = LifeEngine()
+        self.dialog = None
+
+    def on_enter(self):
+        self.clear_widgets()
         self.build_ui()
 
     def build_ui(self):
-        # MAIN LAYOUT
-        layout = MDBoxLayout(orientation='vertical', padding=20, spacing=20)
-        
-        # HEADER (STATS)
-        self.stats_label = MDLabel(
-            text=self.get_stats_text(),
-            halign="center",
-            theme_text_color="Primary",
-            font_style="H6"
-        )
-        layout.add_widget(self.stats_label)
+        main_layout = MDBoxLayout(orientation='vertical', padding=10, spacing=10)
 
-        # EVENT LOG (SCROLLABLE)
-        scroll = MDScrollView(size_hint=(1, 0.6))
+        # 1. DASHBOARD CARD (Stats)
+        card = MDCard(orientation='vertical', size_hint=(1, 0.25), padding=10, radius=[15])
+        self.age_lbl = MDLabel(text="AGE: 0", halign="center", font_style="H5")
+        self.money_lbl = MDLabel(text="BANK: $0", halign="center", theme_text_color="Custom", text_color=(0,1,0,1))
+        self.job_lbl = MDLabel(text="JOB: Unemployed", halign="center", font_style="Caption")
+        
+        stats_box = MDBoxLayout(orientation='horizontal')
+        self.hap_lbl = MDLabel(text="Hap: 100%", halign="center")
+        self.hlt_lbl = MDLabel(text="Hlt: 100%", halign="center")
+        stats_box.add_widget(self.hap_lbl)
+        stats_box.add_widget(self.hlt_lbl)
+
+        card.add_widget(self.age_lbl)
+        card.add_widget(self.money_lbl)
+        card.add_widget(self.job_lbl)
+        card.add_widget(stats_box)
+        main_layout.add_widget(card)
+
+        # 2. EVENT LOG
+        scroll = MDScrollView(size_hint=(1, 0.5))
         self.log_list = MDList()
         scroll.add_widget(self.log_list)
-        layout.add_widget(scroll)
+        main_layout.add_widget(scroll)
 
-        # AGE UP BUTTON
-        btn = MDFillRoundFlatButton(
-            text="AGE UP (+1 Year)",
-            font_size=20,
-            size_hint=(1, 0.1),
-            on_release=self.age_up
-        )
-        layout.add_widget(btn)
+        # 3. ACTION BUTTONS
+        actions = MDBoxLayout(orientation='horizontal', spacing=10, size_hint=(1, 0.1))
+        
+        job_btn = MDRectangleFlatButton(text="JOBS", size_hint=(0.3, 1), on_release=self.show_jobs)
+        buy_btn = MDRectangleFlatButton(text="SHOP", size_hint=(0.3, 1), on_release=self.show_shop)
+        actions.add_widget(job_btn)
+        actions.add_widget(buy_btn)
+        main_layout.add_widget(actions)
 
-        self.add_widget(layout)
-        self.log_event("born", "You were born into a digital world.")
+        # 4. AGE UP BUTTON (BIG)
+        age_btn = MDFillRoundFlatButton(text="AGE UP (+1 Year)", size_hint=(1, 0.15), font_size=20, on_release=self.age_up)
+        main_layout.add_widget(age_btn)
 
-    def get_stats_text(self):
-        return f"Age: {self.age} | Money: ${self.money}\nHappiness: {self.happiness}% | Health: {self.health}%"
+        self.add_widget(main_layout)
+        self.log("You were born.")
 
-    def log_event(self, type, text):
-        self.log_list.add_widget(OneLineListItem(text=f"Age {self.age}: {text}"))
-        # Keep log short to prevent lag
-        if len(self.log_list.children) > 50:
-            self.log_list.remove_widget(self.log_list.children[0])
+    def update_display(self):
+        self.age_lbl.text = f"AGE: {self.engine.age}"
+        self.money_lbl.text = f"BANK: ${self.engine.money}"
+        self.job_lbl.text = f"JOB: {self.engine.job} (${self.engine.salary}/yr)"
+        self.hap_lbl.text = f"Hap: {self.engine.happiness}%"
+        self.hlt_lbl.text = f"Hlt: {self.engine.health}%"
+
+    def log(self, text):
+        item = TwoLineListItem(text=f"Age {self.engine.age}", secondary_text=text)
+        self.log_list.add_widget(item, index=0) # Add to top
 
     def age_up(self, instance):
-        self.age += 1
+        if not self.engine.alive: return
+        event = self.engine.age_up()
+        self.log(event)
+        self.update_display()
         
-        # RANDOM EVENTS
-        events = [
-            ("Found $10 on the street.", 10, 5, 0),
-            ("Got the flu.", -20, -10, -5),
-            ("Made a new friend!", 0, 15, 0),
-            ("Ate bad sushi.", -50, -20, -10),
-            ("Won a small lottery!", 100, 20, 0),
-            ("Nothing interesting happened.", 0, -2, 0)
-        ]
-        
-        evt = random.choice(events)
-        msg, money_chg, hap_chg, hlth_chg = evt
-        
-        self.money += money_chg
-        self.happiness = max(0, min(100, self.happiness + hap_chg))
-        self.health = max(0, min(100, self.health + hlth_chg))
-        
-        self.stats_label.text = self.get_stats_text()
-        self.log_event("life", msg)
-
-        if self.health <= 0:
-            self.log_event("death", "YOU DIED.")
+        if self.engine.health <= 0:
+            self.engine.alive = False
+            self.log("YOU HAVE DIED.")
+            instance.text = "GAME OVER"
             instance.disabled = True
-            self.stats_label.text = "GAME OVER"
+
+    # --- POPUPS ---
+    def show_jobs(self, instance):
+        if self.engine.age < 18:
+            self.log("Too young to work!"); return
+        
+        self.close_dialog()
+        # Simple job list
+        jobs = [("Janitor", 15000), ("Developer", 60000), ("Doctor", 120000)]
+        content = MDBoxLayout(orientation='vertical', size_hint_y=None, height=200)
+        
+        for name, salary in jobs:
+            b = MDRectangleFlatButton(text=f"{name} (${salary})", on_release=lambda x, n=name, s=salary: self.apply_job(n, s))
+            content.add_widget(b)
+
+        self.dialog = MDDialog(title="Job Listings", type="custom", content_cls=content)
+        self.dialog.open()
+
+    def apply_job(self, name, salary):
+        self.engine.job = name
+        self.engine.salary = salary
+        self.log(f"Hired as {name}!")
+        self.update_display()
+        self.close_dialog()
+
+    def show_shop(self, instance):
+        self.close_dialog()
+        items = [("Used Car", 5000), ("House", 100000), ("Fancy Suit", 1000)]
+        content = MDBoxLayout(orientation='vertical', size_hint_y=None, height=200)
+        
+        for name, price in items:
+            b = MDRectangleFlatButton(text=f"{name} (${price})", on_release=lambda x, n=name, p=price: self.buy_item(n, p))
+            content.add_widget(b)
+
+        self.dialog = MDDialog(title="Marketplace", type="custom", content_cls=content)
+        self.dialog.open()
+
+    def buy_item(self, name, price):
+        if self.engine.money >= price:
+            self.engine.money -= price
+            self.engine.assets.append(name)
+            self.log(f"Bought a {name}!")
+        else:
+            self.log(f"Can't afford {name}.")
+        self.update_display()
+        self.close_dialog()
+
+    def close_dialog(self, *args):
+        if self.dialog: self.dialog.dismiss()
 
 class BitLifeApp(MDApp):
     def build(self):
-        self.theme_cls.primary_palette = "Teal"
         self.theme_cls.theme_style = "Dark"
+        self.theme_cls.primary_palette = "Teal"
         
-        # SAFETY WRAPPER
-        try:
-            return GameScreen()
-        except Exception as e:
-            from kivymd.uix.label import MDLabel
-            return MDLabel(text=f"RUNTIME ERROR:\n{traceback.format_exc()}", halign="center", theme_text_color="Error")
+        sm = MDScreenManager()
+        
+        menu = MenuScreen(name='menu')
+        menu.build_ui()
+        sm.add_widget(menu)
+        
+        game = GameScreen(name='game')
+        sm.add_widget(game)
+        
+        return sm
 
 if __name__ == "__main__":
-    try:
-        BitLifeApp().run()
-    except Exception as e:
-        # ULTIMATE FAILSAFE: If App crashes, print why to a file AND stdout
-        print("CRITICAL CRASH:")
-        traceback.print_exc()
-        with open("crash_log.txt", "w") as f:
-            f.write(traceback.format_exc())
+    BitLifeApp().run()
