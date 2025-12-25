@@ -511,7 +511,7 @@ class CharacterCreationScreen(Screen):
             name = f"{random.choice(['Liam','Noah','Oliver','James','Emma','Ava'])} {random.choice(['Smith','Jones','Brown','Garcia'])}"
         self.engine.set_character_details(name, self.selected_gender)
         self.app.engine.reset() # Reset engine with new character details
-        self.app.root.get_screen('game').build_ui()
+        # Removed the direct build_ui call for 'game' screen as on_enter handles it for first time entry
         self.app.root.current = 'game'
 
 class GameScreen(Screen):
@@ -519,10 +519,11 @@ class GameScreen(Screen):
         self.app = MDApp.get_running_app()
         self.engine = self.app.engine
         self._current_dialog = None
-        Clock.schedule_interval(self.check_dialog_queue, 0.5) # Check for dialogs more frequently
-        if not self.ids: # Ensure UI is built if not already (e.g., first entry)
+        # Only build UI if it hasn't been built before (i.e., self.ids is empty)
+        if not self.ids:
              self.build_ui()
         self.update() # Initial update when entering screen
+        Clock.schedule_interval(self.check_dialog_queue, 0.5) # Check for dialogs more frequently
 
     def build_ui(self):
         self.clear_widgets()
@@ -595,6 +596,7 @@ class GameScreen(Screen):
         self.log_rv.data = [{'text': txt} for txt in e.log_history[:50]]
         self.log_rv.refresh_from_data() # Ensure RV updates visually
 
+        # Process dialog queue
         if e.dialog_queue and (self._current_dialog is None or not self._current_dialog.is_open):
             title, text, opts = e.dialog_queue.pop(0)
             self.show_popup(title, text, opts)
